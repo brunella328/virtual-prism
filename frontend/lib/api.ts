@@ -109,3 +109,78 @@ export async function getScheduledPosts(
 export async function cancelScheduledPost(jobId: string): Promise<{ cancelled: boolean; job_id: string }> {
   return apiDelete(`/api/instagram/schedule/${encodeURIComponent(jobId)}`)
 }
+
+// ---------------------------------------------------------------------------
+// Interact / Auto-Reply Types
+// ---------------------------------------------------------------------------
+
+export interface PendingReply {
+  reply_id: string
+  persona_id: string
+  ig_comment_id: string
+  ig_media_id: string
+  commenter_name: string
+  comment_text: string
+  draft_text: string
+  risk_level: 'high' | 'low'
+  status: 'pending' | 'sent' | 'dismissed'
+  created_at: string
+}
+
+export interface PendingRepliesResponse {
+  persona_id: string
+  replies: PendingReply[]
+  count: number
+}
+
+export interface AutoReplySettingResponse {
+  persona_id: string
+  mode: 'draft' | 'auto'
+}
+
+// ---------------------------------------------------------------------------
+// Interact / Auto-Reply API functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all pending reply drafts for a persona.
+ */
+export async function getPendingReplies(personaId: string): Promise<PendingRepliesResponse> {
+  return apiGet(`/api/interact/replies/pending/${encodeURIComponent(personaId)}`)
+}
+
+/**
+ * Confirm and send a queued reply draft to Instagram.
+ */
+export async function sendReply(
+  replyId: string,
+  personaId: string,
+): Promise<{ status: string; reply: PendingReply }> {
+  return apiPost(`/api/interact/replies/${encodeURIComponent(replyId)}/send`, {
+    persona_id: personaId,
+  })
+}
+
+/**
+ * Dismiss (ignore) a queued reply draft.
+ */
+export async function dismissReply(replyId: string): Promise<{ status: string; reply: PendingReply }> {
+  return apiPost(`/api/interact/replies/${encodeURIComponent(replyId)}/dismiss`, {})
+}
+
+/**
+ * Get the auto-reply mode setting for a persona.
+ */
+export async function getAutoReplySetting(personaId: string): Promise<AutoReplySettingResponse> {
+  return apiGet(`/api/interact/settings/${encodeURIComponent(personaId)}`)
+}
+
+/**
+ * Update the auto-reply mode setting for a persona.
+ */
+export async function setAutoReplySetting(
+  personaId: string,
+  mode: 'draft' | 'auto',
+): Promise<{ persona_id: string; mode: string; status: string }> {
+  return apiPost(`/api/interact/settings/${encodeURIComponent(personaId)}`, { mode })
+}
