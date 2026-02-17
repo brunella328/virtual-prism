@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api import genesis, life_stream, interact
 
 app = FastAPI(
     title="Virtual Prism API",
@@ -15,12 +16,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(genesis.router, prefix="/api/genesis", tags=["Genesis Engine"])
+app.include_router(life_stream.router, prefix="/api/life-stream", tags=["Life Stream"])
+app.include_router(interact.router, prefix="/api/interact", tags=["Interaction Hub"])
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "virtual-prism-api"}
-
-# Routers (to be implemented)
-# from app.api import genesis, life_stream, interact
-# app.include_router(genesis.router, prefix="/api/genesis")
-# app.include_router(life_stream.router, prefix="/api/life-stream")
-# app.include_router(interact.router, prefix="/api/interact")
