@@ -184,3 +184,40 @@ export async function setAutoReplySetting(
 ): Promise<{ persona_id: string; mode: string; status: string }> {
   return apiPost(`/api/interact/settings/${encodeURIComponent(personaId)}`, { mode })
 }
+
+// ---------------------------------------------------------------------------
+// Fan Memory Types
+// ---------------------------------------------------------------------------
+
+export interface FanRecord {
+  fan_id: string
+  username: string
+  interaction_count: number
+  last_interaction: string   // ISO datetime
+  notes: string
+  first_seen: string         // ISO datetime
+}
+
+export interface FanListResponse {
+  persona_id: string
+  fans: FanRecord[]
+  count: number
+}
+
+// ---------------------------------------------------------------------------
+// Fan Memory API functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the fan list for a given persona, sorted by interaction count.
+ */
+export async function getFanList(personaId: string, limit = 20): Promise<FanListResponse> {
+  return apiGet(`/api/fans/${encodeURIComponent(personaId)}?limit=${limit}`)
+}
+
+/**
+ * Fetch a single fan record for the given persona + fan.
+ */
+export async function getFanDetail(personaId: string, fanId: string): Promise<FanRecord> {
+  return apiGet(`/api/fans/${encodeURIComponent(personaId)}/${encodeURIComponent(fanId)}`)
+}

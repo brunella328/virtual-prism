@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from app.services import interact_service
+from app.services import interact_service, fan_memory_service
 from app.services.instagram_service import _token_store as ig_token_store
 
 logger = logging.getLogger(__name__)
@@ -68,19 +68,27 @@ async def instagram_webhook(request: Request):
             ig_comment_id = value.get("id", "")
             ig_media_id = value.get("media", {}).get("id", "") if isinstance(value.get("media"), dict) else value.get("media_id", "")
             commenter_name = value.get("from", {}).get("name", "匿名用戶")
+            fan_id = value.get("from", {}).get("id", "")
             comment_text = value.get("text", "")
 
             # Derive persona_id from media owner (best-effort: scan token store)
-            ig_account_id_from_webhook = value.get("from", {}).get("id", "")
+            ig_account_id_from_webhook = fan_id
             persona_id = _resolve_persona_id(ig_account_id_from_webhook)
 
             if not comment_text:
                 logger.warning("Received comment event with empty text, skipping")
                 continue
 
+            # Update fan memory before generating the reply
+            if fan_id:
+                try:
+                    fan_memory_service.upsert_fan(persona_id, fan_id, commenter_name, comment_text)
+                except Exception as fan_exc:
+                    logger.warning("Fan memory upsert failed: %s", fan_exc)
+
             try:
                 draft_text = interact_service.generate_reply_draft(
-                    persona_id, comment_text, commenter_name
+                    persona_id, comment_text, commenter_name, fan_id=fan_id
                 )
                 risk_level = interact_service.check_risk(comment_text)
                 mode = interact_service.get_auto_reply_setting(persona_id)

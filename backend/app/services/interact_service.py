@@ -142,17 +142,27 @@ def generate_reply_draft(
     persona_id: str,
     comment_text: str,
     commenter_name: str,
+    fan_id: str = "",
 ) -> str:
     """
     Generate a reply draft using Claude that matches the persona's voice.
     Falls back to a safe canned reply if the API call fails.
+
+    fan_id (optional): when provided, fan memory context is injected into
+    the prompt so Claude can personalise the reply for returning fans.
     """
+    from app.services import fan_memory_service  # avoid circular import
+
     context_chunks = query_persona_context(persona_id, comment_text, top_k=3)
     persona_context = "\n".join(context_chunks) if context_chunks else "這是一個友善的虛擬網紅人設。"
 
+    # Inject fan memory context if available
+    fan_context = fan_memory_service.get_fan_context(persona_id, fan_id) if fan_id else ""
+    fan_section = f"\n粉絲資訊：{fan_context}" if fan_context else ""
+
     prompt = f"""你是一個 AI 虛擬網紅，以下是你的人設資料：
 
-{persona_context}
+{persona_context}{fan_section}
 
 有一位名叫「{commenter_name}」的粉絲在 Instagram 留言：
 「{comment_text}」
@@ -162,6 +172,7 @@ def generate_reply_draft(
 - 親切自然，不能太正式或太生硬
 - 不超過 150 字
 - 可以加入適當的 emoji
+- 若粉絲資訊中有 username，可以在回覆中叫出粉絲名字，讓回覆更個人化
 - 只輸出回覆內容本身，不要加任何說明或前言"""
 
     anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")

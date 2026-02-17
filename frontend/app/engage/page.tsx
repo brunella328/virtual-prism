@@ -7,7 +7,9 @@ import {
   dismissReply,
   getAutoReplySetting,
   setAutoReplySetting,
+  getFanList,
   type PendingReply,
+  type FanRecord,
 } from '@/lib/api'
 
 const PERSONA_ID = 'demo'
@@ -28,6 +30,8 @@ export default function EngagePage() {
   const [repliesLoading, setRepliesLoading] = useState(true)
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [fans, setFans] = useState<FanRecord[]>([])
+  const [fansLoading, setFansLoading] = useState(true)
 
   // ── Load mode & replies on mount ──────────────────────────────────────────
   const fetchReplies = useCallback(async () => {
@@ -42,6 +46,18 @@ export default function EngagePage() {
     }
   }, [])
 
+  const fetchFans = useCallback(async () => {
+    setFansLoading(true)
+    try {
+      const data = await getFanList(PERSONA_ID)
+      setFans(data.fans)
+    } catch {
+      // silently fail — empty state will show
+    } finally {
+      setFansLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     async function init() {
       try {
@@ -51,9 +67,10 @@ export default function EngagePage() {
         // default to 'draft' on error
       }
       await fetchReplies()
+      await fetchFans()
     }
     init()
-  }, [fetchReplies])
+  }, [fetchReplies, fetchFans])
 
   // ── Toggle mode ───────────────────────────────────────────────────────────
   async function handleToggleMode() {
@@ -241,7 +258,7 @@ export default function EngagePage() {
       </section>
 
       {/* ── 區塊 C：統計數字 ─────────────────────────────────────────────── */}
-      <section>
+      <section className="mb-8">
         <h2 className="text-lg font-semibold mb-4">今日數據</h2>
         <div className="grid grid-cols-3 gap-4">
           <StatCard
@@ -264,6 +281,68 @@ export default function EngagePage() {
         <p className="text-xs text-gray-400 mt-3">
           * 留言數與已發送數為 mock 資料；待確認數為即時資料
         </p>
+      </section>
+
+      {/* ── 區塊 D：粉絲記憶庫 ───────────────────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold">粉絲互動記錄</h2>
+            <p className="text-sm text-gray-500">AI 自動記錄每位粉絲的互動歷史，讓回覆更個人化</p>
+          </div>
+          <button
+            onClick={fetchFans}
+            disabled={fansLoading}
+            className="text-sm text-gray-500 hover:text-black underline disabled:opacity-50"
+          >
+            重新整理
+          </button>
+        </div>
+
+        {fansLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : fans.length === 0 ? (
+          <div className="p-10 border border-dashed border-gray-300 rounded-xl text-center text-gray-400">
+            <p className="text-2xl mb-2">👥</p>
+            <p>尚無互動記錄，開始和粉絲互動後會在這裡顯示</p>
+          </div>
+        ) : (
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-4 gap-4 px-5 py-3 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <span>用戶名</span>
+              <span className="text-center">互動次數</span>
+              <span>最後互動時間</span>
+              <span>備註摘要</span>
+            </div>
+            {/* Table rows */}
+            {fans.map((fan, idx) => (
+              <div
+                key={fan.fan_id}
+                className={`grid grid-cols-4 gap-4 px-5 py-4 text-sm items-start ${
+                  idx !== fans.length - 1 ? 'border-b border-gray-100' : ''
+                }`}
+              >
+                <span className="font-medium text-black">@{fan.username}</span>
+                <span className="text-center">
+                  <span className="inline-flex items-center justify-center w-8 h-8 bg-black text-white text-xs font-bold rounded-full">
+                    {fan.interaction_count}
+                  </span>
+                </span>
+                <span className="text-gray-500 text-xs leading-relaxed pt-1">
+                  {new Date(fan.last_interaction).toLocaleString('zh-TW')}
+                </span>
+                <span className="text-gray-600 text-xs leading-relaxed line-clamp-2">
+                  {fan.notes ? fan.notes.slice(-80) : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   )
