@@ -8,6 +8,7 @@ router = APIRouter()
 class GenerateScheduleRequest(BaseModel):
     persona: dict
     appearance_prompt: Optional[str] = ""
+    face_image_url: Optional[str] = ""   # InstantID 人臉參考圖 URL
 
 class RegenerateRequest(BaseModel):
     original_prompt: str
@@ -19,7 +20,8 @@ async def generate_schedule(persona_id: str, req: GenerateScheduleRequest):
     return await life_stream_service.generate_weekly_schedule(
         persona_id=persona_id,
         persona=req.persona,
-        appearance_prompt=req.appearance_prompt or ""
+        appearance_prompt=req.appearance_prompt or "",
+        face_image_url=req.face_image_url or ""
     )
 
 @router.post("/regenerate/{content_id}")

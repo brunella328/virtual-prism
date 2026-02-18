@@ -78,6 +78,14 @@ export default function OnboardingPage() {
       localStorage.setItem('vp_persona_id', personaResult.persona_id)
       localStorage.setItem('vp_persona', JSON.stringify(personaResult.persona))
       localStorage.setItem('vp_appearance_prompt', appearance?.appearance?.image_prompt || '')
+      // 儲存第一張參考圖的 data URL，供 InstantID 使用（保持人臉一致性）
+      if (files && files.length > 0) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          localStorage.setItem('vp_face_image', e.target?.result as string || '')
+        }
+        reader.readAsDataURL(files[0])
+      }
       setStep('done')
     } catch (err) {
       console.error('Onboarding error:', err)

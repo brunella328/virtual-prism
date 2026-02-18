@@ -26,7 +26,7 @@ SCHEDULE_PROMPT = """你是一個 AI 網紅內容規劃師。
 確保 7 天場景多樣化（室內/室外、日間/夜間交替），符合人設生活風格。
 重要：scene_prompt 只描述場景環境，不要描述人物外觀（人物描述由系統統一注入）。"""
 
-async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_prompt: str = "") -> dict:
+async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_prompt: str = "", face_image_url: str = "") -> dict:
     """T6: 根據人設生成 7 天圖文排程（含生圖）"""
     
     base_prompt = appearance_prompt or "attractive person, high quality, realistic"
@@ -47,35 +47,52 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
     schedule = json.loads(schedule_raw)
 
     # Step 2: 為每天加入日期 + 呼叫生圖（並行）
+    # 推斷攝影風格（依場景關鍵字）
+    SCENE_CAMERA_MAP = {
+        "night": "night", "neon": "night", "bar": "night", "club": "night",
+        "portrait": "portrait", "studio": "portrait",
+        "outdoor": "outdoor", "beach": "outdoor", "park": "outdoor", "mountain": "outdoor",
+        "indoor": "indoor", "cafe": "indoor", "office": "indoor", "home": "indoor",
+    }
+
     async def generate_day(item: dict, offset: int) -> dict:
         date = (start_date + timedelta(days=offset)).strftime("%Y-%m-%d")
         scene_prompt = item.get("scene_prompt", item.get("image_prompt", "lifestyle photo"))
 
-        # 完整 prompt = 角色外觀（高優先）+ 場景 + 品質關鍵字
-        full_prompt = (
-            f"{base_prompt}, "
-            f"{scene_prompt}, "
-            "photorealistic, high quality, 8k, detailed face, sharp focus, "
-            "natural lighting, instagram style photo"
+        # 推斷攝影風格
+        scene_lower = scene_prompt.lower()
+        camera_style = "lifestyle"
+        for kw, style in SCENE_CAMERA_MAP.items():
+            if kw in scene_lower:
+                camera_style = style
+                break
+
+        # 大哥的結構化 prompt（角色描述優先）
+        full_prompt = comfyui_service.build_realism_prompt(
+            character_desc=base_prompt,
+            scene_prompt=scene_prompt,
+            camera_style=camera_style,
         )
-        # 加上人設職業風格強化
-        occupation = persona.get("occupation", "")
-        if occupation:
-            full_prompt = f"{base_prompt}, {occupation} lifestyle, {scene_prompt}, photorealistic, high quality, 8k, detailed face, sharp focus"
 
         try:
-            image_url = await comfyui_service.generate_image(prompt=full_prompt, seed=item.get("seed", 42))
-            seed = item.get("seed", 42)
+            image_url = await comfyui_service.generate_image(
+                prompt=full_prompt,
+                seed=item.get("seed", 42),
+                face_image_url=face_image_url,
+                camera_style=camera_style,
+            )
+            seed_val = item.get("seed", 42)
         except Exception as e:
+            logger.error(f"Image generation failed for day {item.get('day')}: {e}")
             image_url = None
-            seed = -1
+            seed_val = -1
 
         return {
             **item,
-            "image_prompt": full_prompt,  # 記錄實際使用的 prompt
+            "image_prompt": full_prompt,
             "date": date,
             "image_url": image_url,
-            "seed": seed,
+            "seed": seed_val,
             "status": "draft"
         }
 

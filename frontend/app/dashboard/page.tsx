@@ -33,10 +33,15 @@ export default function DashboardPage() {
 
     try {
       const persona = JSON.parse(personaRaw)
+      const faceImageUrl = localStorage.getItem('vp_face_image') || ''
       const res = await fetch(`${API}/api/life-stream/generate-schedule/${personaId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona, appearance_prompt: appearancePrompt }),
+        body: JSON.stringify({
+          persona,
+          appearance_prompt: appearancePrompt,
+          face_image_url: faceImageUrl,  // InstantID 人臉圖
+        }),
       })
       if (!res.ok) throw new Error(`API ${res.status}`)
       const data = await res.json()
