@@ -1,27 +1,53 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import WeekCalendar from '@/components/life-stream/WeekCalendar'
 
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function DashboardPage() {
+  const router = useRouter()
   const [schedule, setSchedule] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    // TODO: 從 API 取得排程（串接 persona_id）
-    // 暫時用 mock 資料展示 UI
-    const mockSchedule = Array.from({ length: 7 }, (_, i) => ({
-      day: i + 1,
-      date: new Date(Date.now() + i * 86400000).toISOString().split('T')[0],
-      scene: ['海邊晨跑', '咖啡廳工作', '衝浪練習', '市集閒逛', '健身房', '好友聚餐', '夕陽海邊'][i],
-      caption: ['開始美好的一天 🌊', '咖啡 + 工作 = 完美 ☕', '浪來了！🤙', '挖到寶！🎁', '破 PR 了 💪', '最棒的朋友們 🥂', '這個時刻 ✨'][i],
-      image_url: null,
-      seed: Math.floor(Math.random() * 99999),
-      status: 'draft' as const,
-      hashtags: ['#生活', '#日常', '#lifestyle'],
-    }))
-    setSchedule(mockSchedule)
-    setLoading(false)
+    generateSchedule()
   }, [])
+
+  const generateSchedule = async () => {
+    const personaId = localStorage.getItem('vp_persona_id')
+    const personaRaw = localStorage.getItem('vp_persona')
+    const appearancePrompt = localStorage.getItem('vp_appearance_prompt') || ''
+
+    if (!personaId || !personaRaw) {
+      setError('找不到人設資料，請先完成 Onboarding')
+      setLoading(false)
+      return
+    }
+
+    setGenerating(true)
+    setLoading(true)
+    setError('')
+
+    try {
+      const persona = JSON.parse(personaRaw)
+      const res = await fetch(`${API}/api/life-stream/generate-schedule/${personaId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ persona, appearance_prompt: appearancePrompt }),
+      })
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const data = await res.json()
+      setSchedule(data.schedule || data)
+    } catch (e) {
+      setError(`生成失敗：${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setLoading(false)
+      setGenerating(false)
+    }
+  }
 
   const handleApprove = (day: number) => {
     setSchedule(prev => prev.map(item =>
@@ -33,12 +59,43 @@ export default function DashboardPage() {
       item.day === day ? { ...item, status: 'rejected' } : item
     ))
   }
-  const handleRegenerate = (day: number, instruction?: string) => {
-    console.log(`Regenerating day ${day} with instruction: ${instruction}`)
-    // TODO: 呼叫 /api/image/regenerate
+  const handleRegenerate = async (day: number, instruction?: string) => {
+    const item = schedule.find(s => s.day === day)
+    if (!item) return
+    setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'regenerating' } : s))
+    try {
+      const res = await fetch(`${API}/api/life-stream/regenerate/${day}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original_prompt: item.image_prompt, instruction }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setSchedule(prev => prev.map(s => s.day === day ? { ...s, ...updated, status: 'draft' } : s))
+      }
+    } catch {
+      setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
+    }
   }
 
   const approvedCount = schedule.filter(d => d.status === 'approved').length
+
+  if (error) return (
+    <main className="min-h-screen flex flex-col items-center justify-center p-8">
+      <p className="text-red-500 mb-4">{error}</p>
+      <button onClick={() => router.push('/onboarding')} className="bg-black text-white px-6 py-2 rounded-lg">
+        回到 Onboarding
+      </button>
+    </main>
+  )
+
+  if (loading) return (
+    <main className="min-h-screen flex flex-col items-center justify-center">
+      <div className="text-5xl mb-4 animate-spin">🌈</div>
+      <h2 className="text-xl font-semibold">{generating ? 'AI 生成 7 天內容 + 圖片中...' : '載入中...'}</h2>
+      <p className="text-gray-400 mt-2 text-sm">生圖約需 20-40 秒，請稍候</p>
+    </main>
+  )
 
   return (
     <main className="min-h-screen p-6 max-w-4xl mx-auto">
@@ -47,24 +104,26 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold">內容審核後台</h1>
           <p className="text-gray-500 text-sm mt-1">本週排程 · {approvedCount}/7 已核准</p>
         </div>
-        {approvedCount > 0 && (
-          <a href="/publish"
-            className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800">
-            排程發布 {approvedCount} 則 →
-          </a>
-        )}
+        <div className="flex gap-3">
+          <button onClick={generateSchedule} disabled={generating}
+            className="border px-4 py-2 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50">
+            {generating ? '生成中...' : '重新生成'}
+          </button>
+          {approvedCount > 0 && (
+            <a href="/publish"
+              className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800">
+              排程發布 {approvedCount} 則 →
+            </a>
+          )}
+        </div>
       </div>
 
-      {loading ? (
-        <div className="text-center py-20 text-gray-400">載入中...</div>
-      ) : (
-        <WeekCalendar
-          schedule={schedule}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onRegenerate={handleRegenerate}
-        />
-      )}
+      <WeekCalendar
+        schedule={schedule}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onRegenerate={handleRegenerate}
+      />
     </main>
   )
 }

@@ -19,11 +19,12 @@ SCHEDULE_PROMPT = """你是一個 AI 網紅內容規劃師。
     "day": 1,
     "scene": "場景描述（中文，25字以內）",
     "caption": "Instagram 文案（中文，含 1-2 個 emoji，80字以內）",
-    "image_prompt": "SDXL 生圖 Prompt（英文，包含人設外觀特徵 + 場景，50字以內）",
+    "scene_prompt": "純場景描述（英文，只描述場景/環境/光線/氣氛，不含人物，30字以內）",
     "hashtags": ["#tag1", "#tag2", "#tag3"]
   }
 ]
-確保 7 天場景多樣化（室內/室外、日間/夜間交替），符合人設生活風格。"""
+確保 7 天場景多樣化（室內/室外、日間/夜間交替），符合人設生活風格。
+重要：scene_prompt 只描述場景環境，不要描述人物外觀（人物描述由系統統一注入）。"""
 
 async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_prompt: str = "") -> dict:
     """T6: 根據人設生成 7 天圖文排程（含生圖）"""
@@ -48,17 +49,30 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
     # Step 2: 為每天加入日期 + 呼叫生圖（並行）
     async def generate_day(item: dict, offset: int) -> dict:
         date = (start_date + timedelta(days=offset)).strftime("%Y-%m-%d")
-        full_prompt = f"{base_prompt}, {item['image_prompt']}"
-        
+        scene_prompt = item.get("scene_prompt", item.get("image_prompt", "lifestyle photo"))
+
+        # 完整 prompt = 角色外觀（高優先）+ 場景 + 品質關鍵字
+        full_prompt = (
+            f"{base_prompt}, "
+            f"{scene_prompt}, "
+            "photorealistic, high quality, 8k, detailed face, sharp focus, "
+            "natural lighting, instagram style photo"
+        )
+        # 加上人設職業風格強化
+        occupation = persona.get("occupation", "")
+        if occupation:
+            full_prompt = f"{base_prompt}, {occupation} lifestyle, {scene_prompt}, photorealistic, high quality, 8k, detailed face, sharp focus"
+
         try:
             image_url = await comfyui_service.generate_image(prompt=full_prompt, seed=item.get("seed", 42))
             seed = item.get("seed", 42)
         except Exception as e:
             image_url = None
             seed = -1
-        
+
         return {
             **item,
+            "image_prompt": full_prompt,  # 記錄實際使用的 prompt
             "date": date,
             "image_url": image_url,
             "seed": seed,

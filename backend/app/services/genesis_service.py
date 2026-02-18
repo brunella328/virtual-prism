@@ -23,18 +23,19 @@ PERSONA_PROMPT = """你是一個專業的虛擬人設設計師。
   "weekly_lifestyle": "一段描述這個人典型一週生活的文字，50字以內"
 }"""
 
-APPEARANCE_PROMPT = """你是一個專業的角色視覺分析師。
-分析圖片中人物的外觀特徵，並輸出可用於 AI 生圖的描述。
+APPEARANCE_PROMPT = """你是一個專業的角色視覺分析師，專門為 AI 生圖（FLUX/SDXL）提取人物描述。
+分析圖片中人物的外觀特徵，輸出高度詳細的描述，用於保持角色一致性。
 
 輸出必須是嚴格的 JSON 格式（不要有多餘文字）：
 {
-  "facial_features": "臉部特徵描述（英文，適合 Stable Diffusion）",
-  "skin_tone": "膚色描述",
-  "hair": "髮型/髮色描述",
-  "body": "體型描述",
-  "style": "穿搭風格",
-  "image_prompt": "整合以上特徵的完整英文生圖 Prompt，適合 SDXL 使用"
-}"""
+  "facial_features": "臉部特徵（英文）：臉型、眼睛形狀/顏色、鼻子、嘴唇、眉毛等細節",
+  "skin_tone": "膚色（英文）：具體描述如 warm olive skin tone, fair porcelain skin 等",
+  "hair": "髮型髮色（英文）：長度、顏色、質地、樣式，如 long straight black hair with slight waves",
+  "body": "體型（英文）：身材比例、肩寬、整體輪廓",
+  "style": "穿搭風格（英文）：服裝類型和風格傾向",
+  "image_prompt": "整合所有特徵的完整英文生圖 Prompt（100字以上），格式：[性別+年齡] [族裔] woman/man, [臉部細節], [膚色], [髮型], [體型], [風格特徵], ultra detailed face, consistent character, photorealistic"
+}
+重要：image_prompt 必須極度詳細，讓 AI 生圖模型能在不同場景中生成同一個人。"""
 
 async def create_persona(description: str) -> dict:
     """T3: 一句話 → 人設 JSON"""

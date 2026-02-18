@@ -61,20 +61,27 @@ export default function OnboardingPage() {
       }
 
       // T3: 人設稜鏡
-      const personaData = await apiPost('/api/genesis/create-persona', null)
-        .catch(() => null)
-      // 用 FormData 傳 description
       const formData2 = new FormData()
       formData2.append('description', description)
-      const personaRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/genesis/create-persona`, {
+      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const personaRes = await fetch(`${API}/api/genesis/create-persona`, {
         method: 'POST',
         body: formData2,
       })
+      if (!personaRes.ok) {
+        const errText = await personaRes.text()
+        throw new Error(`Persona API error: ${personaRes.status} - ${errText}`)
+      }
       const personaResult = await personaRes.json()
       setPersona(personaResult)
+      // 儲存到 localStorage 讓 dashboard 使用
+      localStorage.setItem('vp_persona_id', personaResult.persona_id)
+      localStorage.setItem('vp_persona', JSON.stringify(personaResult.persona))
+      localStorage.setItem('vp_appearance_prompt', appearance?.appearance?.image_prompt || '')
       setStep('done')
     } catch (err) {
-      console.error(err)
+      console.error('Onboarding error:', err)
+      alert(`發生錯誤：${err instanceof Error ? err.message : String(err)}`)
       setStep('input')
     }
   }
