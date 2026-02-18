@@ -51,9 +51,8 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
         full_prompt = f"{base_prompt}, {item['image_prompt']}"
         
         try:
-            img_result = await comfyui_service.generate_image(prompt=full_prompt)
-            image_url = img_result["url"]
-            seed = img_result["seed"]
+            image_url = await comfyui_service.generate_image(prompt=full_prompt, seed=item.get("seed", 42))
+            seed = item.get("seed", 42)
         except Exception as e:
             image_url = None
             seed = -1
@@ -85,22 +84,10 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
 async def regenerate_content(content_id: str, original_prompt: str, instruction: str = "") -> dict:
     """T8: 一鍵重繪"""
     enhanced = f"{original_prompt}, {instruction}" if instruction else original_prompt
-    result = await comfyui_service.generate_image(prompt=enhanced)
+    image_url = await comfyui_service.generate_image(prompt=enhanced)
     return {
         "content_id": content_id,
-        "image_url": result["url"],
-        "seed": result["seed"],
-        "status": "regenerated"
-    }
-
-
-# Alias for regenerate (T8)
-async def regenerate_content(content_id: str, original_prompt: str, instruction: str = "") -> dict:
-    enhanced = f"{original_prompt}, {instruction}" if instruction else original_prompt
-    result = await comfyui_service.generate_image(prompt=enhanced)
-    return {
-        "content_id": content_id,
-        "image_url": result["url"],
-        "seed": result["seed"],
+        "image_url": image_url,
+        "seed": -1,
         "status": "regenerated"
     }

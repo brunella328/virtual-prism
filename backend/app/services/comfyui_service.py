@@ -1,119 +1,80 @@
+"""
+Image Generation Service
+MVP: Replicate API with FLUX.1-schnell
+Price: ~$0.003/image (13x cheaper than DALL-E 3)
+"""
+import os
 import httpx
 import asyncio
-import os
-import uuid
-import json
-import base64
-from typing import Optional
+import logging
+from typing import List
 
-COMFYUI_URL = os.getenv("COMFYUI_BASE_URL", "http://localhost:8188")
-MOCK_MODE = os.getenv("MOCK_COMFYUI", "true").lower() == "true"
+logger = logging.getLogger(__name__)
 
-# Mock 圖片（1x1 透明 PNG，Base64）
-MOCK_IMAGE_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
+REPLICATE_MODEL = "black-forest-labs/flux-schnell"
+REPLICATE_API_URL = "https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions"
 
-SDXL_WORKFLOW_TEMPLATE = {
-    "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"}},
-    "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
-    "6": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["4", 1], "text": ""}},
-    "7": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["4", 1], "text": "ugly, blurry, low quality, deformed, nsfw"}},
-    "3": {
-        "class_type": "KSampler",
-        "inputs": {
-            "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0],
-            "latent_image": ["5", 0], "seed": 0, "steps": 20,
-            "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0
-        }
-    },
-    "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
-    "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "vp", "images": ["8", 0]}}
-}
-
-async def health_check() -> bool:
-    """檢查 ComfyUI 是否可用"""
-    if MOCK_MODE:
-        return True
-    try:
-        async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(f"{COMFYUI_URL}/system_stats")
-            return resp.status_code == 200
-    except Exception:
-        return False
-
-async def generate_image(
-    prompt: str,
-    negative_prompt: str = "ugly, blurry, low quality, deformed",
-    seed: int = -1,
-    steps: int = 20,
-    width: int = 1024,
-    height: int = 1024,
-) -> dict:
+async def generate_image(prompt: str, seed: int = 42) -> str:
     """
-    生成圖片，回傳 {url, seed, prompt_id}
-    MOCK_MODE=true 時回傳假圖（用於無 ComfyUI 環境的 Demo）
+    呼叫 Replicate FLUX.1-schnell API 生成圖片。
+    返回圖片 URL（Replicate CDN）。
+    若 REPLICATE_API_TOKEN 未設定，返回 placeholder。
     """
-    if MOCK_MODE:
-        await asyncio.sleep(1)  # 模擬生成延遲
-        mock_seed = seed if seed >= 0 else int(uuid.uuid4().int % (2**32))
-        return {
-            "url": f"data:image/png;base64,{MOCK_IMAGE_B64}",
-            "seed": mock_seed,
-            "prompt_id": str(uuid.uuid4()),
-            "mock": True
+    if not REPLICATE_API_TOKEN:
+        logger.warning("REPLICATE_API_TOKEN not set, returning placeholder")
+        return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+    headers = {
+        "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
+        "Content-Type": "application/json",
+        "Prefer": "wait",  # 同步等待結果（最多 60 秒）
+    }
+
+    payload = {
+        "input": {
+            "prompt": prompt,
+            "num_outputs": 1,
+            "aspect_ratio": "1:1",
+            "output_format": "webp",
+            "output_quality": 80,
+            "seed": seed % (2**32),  # FLUX seed range
         }
+    }
 
-    workflow = json.loads(json.dumps(SDXL_WORKFLOW_TEMPLATE))
-    workflow["6"]["inputs"]["text"] = prompt
-    workflow["7"]["inputs"]["text"] = negative_prompt
-    workflow["3"]["inputs"]["seed"] = seed if seed >= 0 else int(uuid.uuid4().int % (2**32))
-    workflow["3"]["inputs"]["steps"] = steps
-    workflow["5"]["inputs"]["width"] = width
-    workflow["5"]["inputs"]["height"] = height
-
-    client_id = str(uuid.uuid4())
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        # 提交任務
-        resp = await client.post(
-            f"{COMFYUI_URL}/prompt",
-            json={"prompt": workflow, "client_id": client_id}
-        )
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        # 建立 prediction（帶 Prefer: wait 會同步等待）
+        resp = await client.post(REPLICATE_API_URL, json=payload, headers=headers)
         resp.raise_for_status()
-        prompt_id = resp.json()["prompt_id"]
+        data = resp.json()
 
-        # 輪詢結果（最多等 90 秒）
-        for attempt in range(45):
+        # 如果 Prefer: wait 生效，output 直接在回應裡
+        if data.get("output"):
+            urls = data["output"]
+            return urls[0] if isinstance(urls, list) else urls
+
+        # Fallback: polling（部分情況需要）
+        prediction_url = data.get("urls", {}).get("get", "")
+        if not prediction_url:
+            logger.error("No prediction URL returned")
+            return ""
+
+        for _ in range(30):  # 最多等 60 秒
             await asyncio.sleep(2)
-            history_resp = await client.get(f"{COMFYUI_URL}/history/{prompt_id}")
-            history = history_resp.json()
+            poll = await client.get(prediction_url, headers=headers)
+            poll_data = poll.json()
+            status = poll_data.get("status")
+            if status == "succeeded":
+                output = poll_data.get("output", [])
+                return output[0] if output else ""
+            elif status in ("failed", "canceled"):
+                logger.error(f"Prediction {status}: {poll_data.get('error')}")
+                return ""
 
-            if prompt_id in history:
-                outputs = history[prompt_id].get("outputs", {})
-                if "9" in outputs and outputs["9"].get("images"):
-                    img = outputs["9"]["images"][0]
-                    img_url = f"{COMFYUI_URL}/view?filename={img['filename']}&subfolder={img.get('subfolder','')}&type={img.get('type','output')}"
-                    return {
-                        "url": img_url,
-                        "seed": workflow["3"]["inputs"]["seed"],
-                        "prompt_id": prompt_id,
-                        "mock": False
-                    }
+    return ""
 
-    raise TimeoutError(f"ComfyUI 生成超時（prompt_id: {prompt_id}）")
 
-async def inpaint(
-    image_url: str,
-    mask_prompt: str,
-    instruction: str,
-    seed: int = -1,
-) -> dict:
-    """T8: In-painting — 根據指令修改圖片局部"""
-    if MOCK_MODE:
-        await asyncio.sleep(1)
-        return {
-            "url": f"data:image/png;base64,{MOCK_IMAGE_B64}",
-            "seed": seed if seed >= 0 else 42,
-            "mock": True
-        }
-    # TODO: 實作 ComfyUI Inpaint workflow
-    raise NotImplementedError("Inpaint workflow 待實作（T8）")
+async def generate_images_batch(prompts: List[str], seeds: List[int]) -> List[str]:
+    """批次生成多張圖片（並發）"""
+    tasks = [generate_image(p, s) for p, s in zip(prompts, seeds)]
+    return await asyncio.gather(*tasks)
