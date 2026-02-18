@@ -13,35 +13,18 @@ import {
   type ScheduledJobInfo,
 } from '@/lib/api'
 
-// ---------------------------------------------------------------------------
-// Mock data — shape mirrors dashboard schedule items
-// ---------------------------------------------------------------------------
-const MOCK_POSTS = [
-  {
-    id: 1,
-    scene: '海邊晨跑',
-    caption: '開始美好的一天 🌊 #生活 #日常 #lifestyle',
-    image_url: 'https://picsum.photos/seed/beach/400/400',
-    status: 'approved' as const,
-  },
-  {
-    id: 2,
-    scene: '咖啡廳工作',
-    caption: '咖啡 + 工作 = 完美 ☕ #生活 #日常 #lifestyle',
-    image_url: 'https://picsum.photos/seed/coffee/400/400',
-    status: 'approved' as const,
-  },
-  {
-    id: 3,
-    scene: '衝浪練習',
-    caption: '浪來了！🤙 #生活 #日常 #lifestyle',
-    image_url: 'https://picsum.photos/seed/surf/400/400',
-    status: 'approved' as const,
-  },
-]
+// persona_id = 'default' 對應後端 env token 預設值
+const PERSONA_ID = 'default'
 
-// Default persona — in production, read from auth/session context
-const PERSONA_ID = 'persona_demo_001'
+type Post = {
+  id: number
+  day?: number
+  scene: string
+  caption: string
+  image_url: string | null
+  status: string
+  hashtags?: string[]
+}
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -71,6 +54,19 @@ function StatusBadge({ connected, igUsername }: { connected: boolean; igUsername
 // ---------------------------------------------------------------------------
 
 export default function PublishPage() {
+  // 從 localStorage 讀取 Dashboard 傳過來的已核准貼文
+  const [posts, setPosts] = useState<Post[]>([])
+
+  useEffect(() => {
+    const raw = localStorage.getItem('vp_approved_posts')
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        setPosts(parsed.map((p: Post, i: number) => ({ ...p, id: p.day ?? i + 1 })))
+      } catch {}
+    }
+  }, [])
+
   // IG connection
   const [igStatus, setIgStatus] = useState<InstagramStatus | null>(null)
   const [statusLoading, setStatusLoading] = useState(true)
@@ -132,7 +128,7 @@ export default function PublishPage() {
   }
 
   // Publish a single post immediately
-  const handlePublishNow = async (post: typeof MOCK_POSTS[0]) => {
+  const handlePublishNow = async (post: Post) => {
     if (!igStatus?.connected) {
       setErrors(['請先連結 Instagram 帳號。'])
       return
@@ -158,7 +154,7 @@ export default function PublishPage() {
       return
     }
 
-    const postsToSchedule: ScheduledPost[] = MOCK_POSTS
+    const postsToSchedule: ScheduledPost[] = posts
       .filter(p => scheduleTimes[p.id])
       .map(p => ({
         image_url: p.image_url,
@@ -252,11 +248,11 @@ export default function PublishPage() {
       {/* ---------------------------------------------------------------- */}
       <section className="mb-8 p-5 border border-gray-200 rounded-2xl">
         <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">
-          區塊 B · 待發布內容（{MOCK_POSTS.length} 則已核准）
+          區塊 B · 待發布內容（{posts.length} 則已核准）
         </h2>
 
         <div className="space-y-4">
-          {MOCK_POSTS.map(post => (
+          {posts.map(post => (
             <div key={post.id} className="flex gap-4 p-4 bg-gray-50 rounded-xl">
               {/* Thumbnail */}
               <img

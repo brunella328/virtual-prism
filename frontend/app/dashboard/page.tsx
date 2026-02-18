@@ -33,14 +33,15 @@ export default function DashboardPage() {
 
     try {
       const persona = JSON.parse(personaRaw)
-      const faceImageUrl = localStorage.getItem('vp_face_image') || ''
+      // InstantID 需要公開 URL，data URL 太大不適合傳 JSON，暫時跳過
+      // TODO: 上傳到 CDN 後再啟用 InstantID
       const res = await fetch(`${API}/api/life-stream/generate-schedule/${personaId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           persona,
           appearance_prompt: appearancePrompt,
-          face_image_url: faceImageUrl,  // InstantID 人臉圖
+          face_image_url: '',
         }),
       })
       if (!res.ok) throw new Error(`API ${res.status}`)
@@ -115,10 +116,15 @@ export default function DashboardPage() {
             {generating ? '生成中...' : '重新生成'}
           </button>
           {approvedCount > 0 && (
-            <a href="/publish"
+            <button
+              onClick={() => {
+                const approved = schedule.filter(s => s.status === 'approved')
+                localStorage.setItem('vp_approved_posts', JSON.stringify(approved))
+                window.location.href = '/publish'
+              }}
               className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800">
               排程發布 {approvedCount} 則 →
-            </a>
+            </button>
           )}
         </div>
       </div>

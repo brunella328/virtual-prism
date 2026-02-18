@@ -1,10 +1,13 @@
 import json
 import os
 import asyncio
+import logging
 import anthropic
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from app.services import comfyui_service
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -96,15 +99,13 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
             "status": "draft"
         }
 
-    # 並行生成 7 天圖片（最多 3 個並發，避免超載）
-    semaphore = asyncio.Semaphore(3)
-    async def bounded_generate(item, offset):
-        async with semaphore:
-            return await generate_day(item, offset)
-
-    days = await asyncio.gather(*[
-        bounded_generate(item, i) for i, item in enumerate(schedule)
-    ])
+    # 循序生成 7 天圖片（避免 Replicate 限速）
+    days = []
+    for i, item in enumerate(schedule):
+        if i > 0:
+            await asyncio.sleep(2)  # 間隔 2 秒避免 429
+        day_result = await generate_day(item, i)
+        days.append(day_result)
 
     return {
         "persona_id": persona_id,

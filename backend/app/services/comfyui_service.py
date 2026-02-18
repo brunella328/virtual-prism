@@ -29,9 +29,11 @@ REPLICATE_BASE = "https://api.replicate.com/v1"
 
 # 真人感必加關鍵字（基礎組）
 REALISM_SUFFIX = (
-    "highly detailed skin texture, skin pores, natural skin imperfections, "
-    "raw photo, unfiltered, non-plastic skin, "
-    "8k resolution, ultra sharp focus"
+    "candid photo, raw unedited photo, film grain, "
+    "highly detailed skin texture, visible skin pores, slight skin imperfections, "
+    "non-plastic skin, real person, not AI generated, "
+    "natural color grading, VSCO film preset, "
+    "8k, ultra sharp focus, depth of field"
 )
 
 NEGATIVE_PROMPT = (
@@ -128,7 +130,7 @@ async def generate_image_realism(
     seed: int = 42,
 ) -> str:
     """
-    Mode B: flux-dev-realism fallback（無參考圖時）
+    Mode B: flux-schnell（穩定可用 + 真人感 prompt + 429 retry）
     """
     if not REPLICATE_API_TOKEN:
         return ""
@@ -141,30 +143,36 @@ async def generate_image_realism(
     payload = {
         "input": {
             "prompt": prompt,
-            "negative_prompt": NEGATIVE_PROMPT,
             "num_outputs": 1,
-            "aspect_ratio": "4:5",    # IG 標準比例
+            "aspect_ratio": "4:5",
             "output_format": "webp",
             "output_quality": 85,
             "seed": seed % (2**32),
-            "guidance": 3.0,          # 大哥建議範圍
+            "go_fast": True,
         }
     }
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        url = f"{REPLICATE_BASE}/models/{MODEL_FLUX_REALISM}/predictions"
-        r = await client.post(url, json=payload, headers=headers)
-        if r.status_code == 404:
-            # fallback to flux-1.1-pro
-            url = f"{REPLICATE_BASE}/models/{MODEL_FLUX_PRO}/predictions"
+    url = f"{REPLICATE_BASE}/models/black-forest-labs/flux-schnell/predictions"
+
+    # 429 retry with backoff（最多 4 次，間隔 5/10/15 秒）
+    for attempt in range(4):
+        async with httpx.AsyncClient(timeout=120.0) as client:
             r = await client.post(url, json=payload, headers=headers)
-        r.raise_for_status()
-        d = r.json()
-        if d.get("output"):
-            out = d["output"]
-            return out[0] if isinstance(out, list) else out
-        poll_url = d.get("urls", {}).get("get", "")
-        return await _poll_prediction(client, poll_url, headers) or ""
+            if r.status_code == 429:
+                wait = (attempt + 1) * 5
+                logger.warning(f"Rate limited, retrying in {wait}s (attempt {attempt+1})")
+                await asyncio.sleep(wait)
+                continue
+            r.raise_for_status()
+            d = r.json()
+            if d.get("output"):
+                out = d["output"]
+                return out[0] if isinstance(out, list) else out
+            poll_url = d.get("urls", {}).get("get", "")
+            return await _poll_prediction(client, poll_url, headers) or ""
+
+    logger.error("All retries exhausted for image generation")
+    return ""
 
 
 async def generate_image(
