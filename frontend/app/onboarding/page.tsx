@@ -1,17 +1,18 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { apiPost } from '@/lib/api'
+
+interface AppearanceData {
+  facial_features: string
+  skin_tone: string
+  hair: string
+  body: string
+  style: string
+  image_prompt: string
+}
 
 interface AppearanceResult {
-  appearance: {
-    facial_features: string
-    skin_tone: string
-    hair: string
-    body: string
-    style: string
-    image_prompt: string
-  }
+  appearance: AppearanceData
 }
 
 interface PersonaResult {
@@ -32,7 +33,7 @@ export default function OnboardingPage() {
   const [files, setFiles] = useState<FileList | null>(null)
   const [previews, setPreviews] = useState<string[]>([])
   const [step, setStep] = useState<'input' | 'analyzing' | 'done'>('input')
-  const [appearance, setAppearance] = useState<AppearanceResult | null>(null)
+  const [appearanceData, setAppearanceData] = useState<AppearanceData | null>(null)
   const [persona, setPersona] = useState<PersonaResult | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,27 +44,28 @@ export default function OnboardingPage() {
     setPreviews(urls)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const runAnalysis = async () => {
     setStep('analyzing')
+    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
     try {
-      // T2: 視覺反推
+      // T2: 視覺反推（先跑，結果直接用本地變數，避免 React state 非同步問題）
+      let localAppearance: AppearanceData | null = null
       if (files && files.length > 0) {
         const formData = new FormData()
         Array.from(files).forEach(f => formData.append('images', f))
-        const appearanceRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/genesis/analyze-appearance`, {
+        const appearanceRes = await fetch(`${API}/api/genesis/analyze-appearance`, {
           method: 'POST',
           body: formData,
         })
-        const appearanceData = await appearanceRes.json()
-        setAppearance(appearanceData)
+        const result: AppearanceResult = await appearanceRes.json()
+        localAppearance = result.appearance
+        setAppearanceData(localAppearance)
       }
 
       // T3: 人設稜鏡
       const formData2 = new FormData()
       formData2.append('description', description)
-      const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const personaRes = await fetch(`${API}/api/genesis/create-persona`, {
         method: 'POST',
         body: formData2,
@@ -72,20 +74,27 @@ export default function OnboardingPage() {
         const errText = await personaRes.text()
         throw new Error(`Persona API error: ${personaRes.status} - ${errText}`)
       }
-      const personaResult = await personaRes.json()
+      const personaResult: PersonaResult = await personaRes.json()
       setPersona(personaResult)
-      // 儲存到 localStorage 讓 dashboard 使用
+
+      // 儲存到 localStorage（使用本地變數，不依賴 React state）
       localStorage.setItem('vp_persona_id', personaResult.persona_id)
       localStorage.setItem('vp_persona', JSON.stringify(personaResult.persona))
-      localStorage.setItem('vp_appearance_prompt', appearance?.appearance?.image_prompt || '')
-      // 儲存第一張參考圖的 data URL，供 InstantID 使用（保持人臉一致性）
+      localStorage.setItem('vp_description', description)
+      localStorage.setItem('vp_appearance_prompt', localAppearance?.image_prompt || '')
+      if (localAppearance) {
+        localStorage.setItem('vp_appearance_detail', JSON.stringify(localAppearance))
+      }
+
+      // 儲存第一張參考圖的 data URL，供 InstantID 使用
       if (files && files.length > 0) {
         const reader = new FileReader()
-        reader.onload = (e) => {
-          localStorage.setItem('vp_face_image', e.target?.result as string || '')
+        reader.onload = (ev) => {
+          localStorage.setItem('vp_face_image', ev.target?.result as string || '')
         }
         reader.readAsDataURL(files[0])
       }
+
       setStep('done')
     } catch (err) {
       console.error('Onboarding error:', err)
@@ -94,6 +103,16 @@ export default function OnboardingPage() {
     }
   }
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await runAnalysis()
+  }
+
+  const handleRegenerate = async () => {
+    await runAnalysis()
+  }
+
+  // ── 分析中 ──────────────────────────────────────────────────────────
   if (step === 'analyzing') {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center">
@@ -104,33 +123,85 @@ export default function OnboardingPage() {
     )
   }
 
+  // ── 人設卡 ──────────────────────────────────────────────────────────
   if (step === 'done' && persona) {
     return (
       <main className="min-h-screen p-8 max-w-2xl mx-auto">
-        <h2 className="text-2xl font-bold mb-6">✨ 人設草稿生成完成</h2>
-        <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+        <h2 className="text-2xl font-bold mb-2">✨ 人設草稿生成完成</h2>
+        <p className="text-sm text-gray-400 mb-6">描述：「{description}」</p>
+
+        {/* 參考圖縮圖 */}
+        {previews.length > 0 && (
+          <div className="flex gap-2 mb-5">
+            {previews.map((src, i) => (
+              <img key={i} src={src} alt="" className="h-20 w-20 object-cover rounded-xl border" />
+            ))}
+          </div>
+        )}
+
+        {/* 人設資訊 */}
+        <div className="bg-gray-50 rounded-xl p-6 space-y-3 mb-4">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">人設資訊</h3>
           <div><span className="font-medium">姓名：</span>{persona.persona.name}</div>
           <div><span className="font-medium">職業：</span>{persona.persona.occupation}</div>
-          <div><span className="font-medium">個性標籤：</span>{persona.persona.personality_tags.join('、')}</div>
+          <div><span className="font-medium">個性標籤：</span>
+            <span className="text-gray-700">{persona.persona.personality_tags.join('、')}</span>
+          </div>
           <div><span className="font-medium">口癖：</span>{persona.persona.speech_pattern}</div>
+          <div><span className="font-medium">核心價值：</span>
+            <span className="text-gray-700">{persona.persona.values?.join('、')}</span>
+          </div>
           <div><span className="font-medium">生活風格：</span>{persona.persona.weekly_lifestyle}</div>
-          {appearance && (
-            <div className="border-t pt-4">
-              <p className="font-medium mb-1">外觀分析</p>
-              <p className="text-sm text-gray-600">{appearance.appearance.image_prompt}</p>
+        </div>
+
+        {/* 外觀分析 */}
+        {appearanceData && (
+          <div className="bg-blue-50 rounded-xl p-6 space-y-2 mb-4">
+            <h3 className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-3">外觀分析（角色一致性）</h3>
+            <div className="grid grid-cols-1 gap-2 text-sm">
+              <div><span className="font-medium text-blue-700">臉部特徵：</span><span className="text-gray-700">{appearanceData.facial_features}</span></div>
+              <div><span className="font-medium text-blue-700">膚色：</span><span className="text-gray-700">{appearanceData.skin_tone}</span></div>
+              <div><span className="font-medium text-blue-700">髮型髮色：</span><span className="text-gray-700">{appearanceData.hair}</span></div>
+              <div><span className="font-medium text-blue-700">體型：</span><span className="text-gray-700">{appearanceData.body}</span></div>
+              <div><span className="font-medium text-blue-700">穿搭風格：</span><span className="text-gray-700">{appearanceData.style}</span></div>
             </div>
-          )}
+            <div className="mt-3 pt-3 border-t border-blue-100">
+              <p className="text-xs font-medium text-blue-600 mb-1">生圖 Prompt（自動注入）</p>
+              <p className="text-xs text-gray-500 leading-relaxed">{appearanceData.image_prompt}</p>
+            </div>
+          </div>
+        )}
+
+        {/* 按鈕列 */}
+        <div className="flex gap-3 mt-2">
+          <button
+            onClick={handleRegenerate}
+            className="flex-1 border border-gray-300 py-3 rounded-lg font-medium hover:bg-gray-50 text-sm"
+          >
+            🔄 重新生成人設
+          </button>
+          <button
+            onClick={() => {
+              // 清空舊的排程 cache，強制 Dashboard 重新生成
+              localStorage.removeItem('vp_schedule')
+              router.push('/dashboard')
+            }}
+            className="flex-2 flex-grow-[2] bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 text-sm"
+          >
+            確認人設，開始生成內容 →
+          </button>
         </div>
         <button
-          onClick={() => router.push('/dashboard')}
-          className="mt-6 w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800"
+          onClick={() => setStep('input')}
+          className="mt-3 w-full text-sm text-gray-400 hover:text-black text-center transition-colors"
         >
-          確認人設，開始生成內容 →
+          ← 修改描述或重新上傳圖片
         </button>
       </main>
     )
   }
 
+  // ── 輸入表單 ──────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8 max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold mb-2">創建你的 AI 網紅</h1>

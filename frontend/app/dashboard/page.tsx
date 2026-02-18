@@ -13,6 +13,18 @@ export default function DashboardPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    // 優先從 localStorage 讀取已存在的排程，避免每次進頁面都重新生成
+    const cached = localStorage.getItem('vp_schedule')
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSchedule(parsed)
+          setLoading(false)
+          return
+        }
+      } catch {}
+    }
     generateSchedule()
   }, [])
 
@@ -46,7 +58,10 @@ export default function DashboardPage() {
       })
       if (!res.ok) throw new Error(`API ${res.status}`)
       const data = await res.json()
-      setSchedule(data.schedule || data)
+      const schedule = data.schedule || data
+      setSchedule(schedule)
+      // Cache 排程，讓 Publish → 回來時不重新生成
+      localStorage.setItem('vp_schedule', JSON.stringify(schedule))
     } catch (e) {
       setError(`生成失敗：${e instanceof Error ? e.message : String(e)}`)
     } finally {
@@ -56,14 +71,22 @@ export default function DashboardPage() {
   }
 
   const handleApprove = (day: number) => {
-    setSchedule(prev => prev.map(item =>
-      item.day === day ? { ...item, status: item.status === 'approved' ? 'draft' : 'approved' } : item
-    ))
+    setSchedule(prev => {
+      const updated = prev.map(item =>
+        item.day === day ? { ...item, status: item.status === 'approved' ? 'draft' : 'approved' } : item
+      )
+      localStorage.setItem('vp_schedule', JSON.stringify(updated))
+      return updated
+    })
   }
   const handleReject = (day: number) => {
-    setSchedule(prev => prev.map(item =>
-      item.day === day ? { ...item, status: 'rejected' } : item
-    ))
+    setSchedule(prev => {
+      const updated = prev.map(item =>
+        item.day === day ? { ...item, status: 'rejected' } : item
+      )
+      localStorage.setItem('vp_schedule', JSON.stringify(updated))
+      return updated
+    })
   }
   const handleRegenerate = async (day: number, instruction?: string) => {
     const item = schedule.find(s => s.day === day)
@@ -111,7 +134,10 @@ export default function DashboardPage() {
           <p className="text-gray-500 text-sm mt-1">本週排程 · {approvedCount}/7 已核准</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={generateSchedule} disabled={generating}
+          <button onClick={() => {
+            localStorage.removeItem('vp_schedule')
+            generateSchedule()
+          }} disabled={generating}
             className="border px-4 py-2 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50">
             {generating ? '生成中...' : '重新生成'}
           </button>
