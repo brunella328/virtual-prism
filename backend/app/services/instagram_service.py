@@ -40,6 +40,27 @@ OAUTH_SCOPE = "instagram_basic,instagram_content_publish,pages_read_engagement"
 _token_store: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
+# Pre-seed token store from environment (MVP shortcut - bypass OAuth)
+# ---------------------------------------------------------------------------
+_ENV_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+_ENV_USER_ID = os.getenv("INSTAGRAM_USER_ID", "")
+
+def _init_env_token() -> None:
+    """If INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID are set in env,
+    pre-seed the token store as persona_id='default' so the app works
+    immediately without going through the OAuth flow."""
+    if _ENV_ACCESS_TOKEN and _ENV_USER_ID:
+        _token_store["default"] = {
+            "access_token": _ENV_ACCESS_TOKEN,
+            "ig_account_id": _ENV_USER_ID,
+            "ig_username": "env_configured",
+            "expires_at": "2099-12-31T00:00:00+00:00",  # long-lived token
+        }
+        logger.info("Instagram token pre-seeded from environment (persona_id='default')")
+
+_init_env_token()
+
+# ---------------------------------------------------------------------------
 # APScheduler
 # ---------------------------------------------------------------------------
 _scheduler = BackgroundScheduler(
