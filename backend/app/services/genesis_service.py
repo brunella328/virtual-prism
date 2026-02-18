@@ -1,12 +1,16 @@
 import json
+import os
 import anthropic
 import openai
+from dotenv import load_dotenv
 from app.models.persona import AppearanceFeatures, PersonaCard, PersonaResponse
 import uuid
 import base64
 
-client_anthropic = anthropic.AsyncAnthropic()
-client_openai = openai.AsyncOpenAI()
+load_dotenv()
+
+client_anthropic = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+client_openai = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 PERSONA_PROMPT = """你是一個專業的虛擬人設設計師。
 根據用戶的一句話描述，生成一個完整的 AI 網紅人設。
@@ -37,7 +41,7 @@ APPEARANCE_PROMPT = """你是一個專業的角色視覺分析師。
 async def create_persona(description: str) -> dict:
     """T3: 一句話 → 人設 JSON"""
     message = await client_anthropic.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-3-haiku-20240307",
         max_tokens=1024,
         messages=[
             {"role": "user", "content": f"請根據以下描述生成人設：{description}"}

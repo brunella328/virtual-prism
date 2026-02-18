@@ -1,10 +1,14 @@
 import json
+import os
 import asyncio
 import anthropic
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from app.services import comfyui_service
 
-client = anthropic.AsyncAnthropic()
+load_dotenv()
+
+client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 SCHEDULE_PROMPT = """你是一個 AI 網紅內容規劃師。
 根據以下人設 JSON，為這個 AI 網紅規劃未來 7 天的 Instagram 圖文內容。
@@ -29,7 +33,7 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
 
     # Step 1: LLM 規劃 7 天內容
     message = await client.messages.create(
-        model="claude-3-5-sonnet-20241022",
+        model="claude-3-haiku-20240307",
         max_tokens=2048,
         messages=[{
             "role": "user",

@@ -13,7 +13,7 @@ FanRecord 結構：
 
 import logging
 from datetime import datetime, timezone
-from typing import TypedDict
+from typing import TypedDict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def upsert_fan(
     return fan_store[key]
 
 
-def get_fan(persona_id: str, fan_id: str) -> FanRecord | None:
+def get_fan(persona_id: str, fan_id: str) -> Optional[FanRecord]:
     """Return the FanRecord for the given persona + fan, or None if not found."""
     return fan_store.get(_store_key(persona_id, fan_id))
 
