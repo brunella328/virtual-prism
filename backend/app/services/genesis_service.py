@@ -1,7 +1,6 @@
 import json
 import os
 import anthropic
-import openai
 from dotenv import load_dotenv
 from app.models.persona import AppearanceFeatures, PersonaCard, PersonaResponse
 import uuid
@@ -10,7 +9,6 @@ import base64
 load_dotenv()
 
 client_anthropic = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-client_openai = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 PERSONA_PROMPT = """你是一個專業的虛擬人設設計師。
 根據用戶的一句話描述，生成一個完整的 AI 網紅人設。
@@ -69,21 +67,34 @@ async def analyze_appearance(images) -> dict:
             "image_url": {"url": f"data:{img.content_type};base64,{b64}"}
         })
     
-    image_contents.append({
+    # 用 Claude Vision 替代 GPT-4o（同樣支援圖片輸入）
+    claude_content = []
+    for img_item in image_contents:
+        if img_item["type"] == "image_url":
+            url = img_item["image_url"]["url"]
+            # data:image/jpeg;base64,xxxx → media_type + data
+            header, data = url.split(",", 1)
+            media_type = header.split(":")[1].split(";")[0]
+            claude_content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": data}
+            })
+    claude_content.append({
         "type": "text",
-        "text": "請分析這些圖片中人物的外觀特徵，輸出 JSON 格式。"
+        "text": APPEARANCE_PROMPT + "\n\n請分析這些圖片中人物的外觀特徵，輸出 JSON 格式。"
     })
-    
-    response = await client_openai.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": APPEARANCE_PROMPT},
-            {"role": "user", "content": image_contents}
-        ],
-        response_format={"type": "json_object"}
+
+    response = await client_anthropic.messages.create(
+        model="claude-3-haiku-20240307",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": claude_content}]
     )
-    
-    appearance_data = json.loads(response.choices[0].message.content)
+
+    raw = response.content[0].text
+    # 從回應中取出 JSON
+    import re
+    match = re.search(r'\{.*\}', raw, re.DOTALL)
+    appearance_data = json.loads(match.group() if match else raw)
     return {"appearance": AppearanceFeatures(**appearance_data)}
 
 async def confirm_persona(persona: PersonaCard) -> dict:
