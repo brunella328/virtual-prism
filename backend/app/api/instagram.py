@@ -92,6 +92,13 @@ async def get_status(persona_id: str = Query(...)):
     return svc.get_connection_status(persona_id)
 
 
+@router.delete("/token/{persona_id}")
+async def disconnect(persona_id: str):
+    """Clear stored token for a persona so the user can reconnect via OAuth."""
+    removed = svc.disconnect_persona(persona_id)
+    return {"disconnected": removed, "persona_id": persona_id}
+
+
 # ---------------------------------------------------------------------------
 # Scheduling
 # ---------------------------------------------------------------------------

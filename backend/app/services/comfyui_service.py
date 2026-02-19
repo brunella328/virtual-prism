@@ -145,8 +145,8 @@ async def generate_image_realism(
             "prompt": prompt,
             "num_outputs": 1,
             "aspect_ratio": "4:5",
-            "output_format": "webp",
-            "output_quality": 85,
+            "output_format": "jpg",
+            "output_quality": 90,
             "seed": seed % (2**32),
             "go_fast": True,
         }

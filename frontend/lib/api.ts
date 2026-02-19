@@ -110,6 +110,14 @@ export async function cancelScheduledPost(jobId: string): Promise<{ cancelled: b
   return apiDelete(`/api/instagram/schedule/${encodeURIComponent(jobId)}`)
 }
 
+/**
+ * Disconnect the Instagram account for a persona (clears stored token).
+ * Use this before re-running the OAuth flow.
+ */
+export async function disconnectInstagram(personaId: string): Promise<{ disconnected: boolean; persona_id: string }> {
+  return apiDelete(`/api/instagram/token/${encodeURIComponent(personaId)}`)
+}
+
 // ---------------------------------------------------------------------------
 // Interact / Auto-Reply Types
 // ---------------------------------------------------------------------------

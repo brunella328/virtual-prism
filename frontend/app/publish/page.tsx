@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   getInstagramStatus,
   getInstagramAuthUrl,
+  disconnectInstagram,
   scheduleInstagramPosts,
   publishNow,
   getScheduledPosts,
@@ -58,13 +59,32 @@ export default function PublishPage() {
   const [posts, setPosts] = useState<Post[]>([])
 
   useEffect(() => {
-    const raw = localStorage.getItem('vp_approved_posts')
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw)
-        setPosts(parsed.map((p: Post, i: number) => ({ ...p, id: p.day ?? i + 1 })))
-      } catch {}
+    // 優先讀已核准清單，備援從完整排程裡撈 approved 項目
+    const loadPosts = () => {
+      const raw = localStorage.getItem('vp_approved_posts')
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPosts(parsed.map((p: Post, i: number) => ({ ...p, id: p.day ?? i + 1 })))
+            return
+          }
+        } catch {}
+      }
+      // 備援：從 vp_schedule 撈 approved 項目
+      const scheduleRaw = localStorage.getItem('vp_schedule')
+      if (scheduleRaw) {
+        try {
+          const schedule = JSON.parse(scheduleRaw)
+          const approved = schedule.filter((p: Post) => p.status === 'approved')
+          if (approved.length > 0) {
+            setPosts(approved.map((p: Post, i: number) => ({ ...p, id: p.day ?? i + 1 })))
+            localStorage.setItem('vp_approved_posts', JSON.stringify(approved))
+          }
+        } catch {}
+      }
     }
+    loadPosts()
   }, [])
 
   // IG connection
@@ -117,13 +137,26 @@ export default function PublishPage() {
     loadScheduledJobs()
   }, [loadScheduledJobs])
 
-  // Connect IG account
+  // Connect IG account (OAuth)
   const handleConnect = async () => {
     try {
       const data = await getInstagramAuthUrl(PERSONA_ID)
       window.location.href = data.auth_url
     } catch {
       setErrors(['無法取得授權網址，請確認後端設定了 INSTAGRAM_APP_ID。'])
+    }
+  }
+
+  // Disconnect and re-authorize via OAuth
+  const handleReconnect = async () => {
+    setErrors([])
+    setSuccessMsg('')
+    try {
+      await disconnectInstagram(PERSONA_ID)
+      const data = await getInstagramAuthUrl(PERSONA_ID)
+      window.location.href = data.auth_url
+    } catch {
+      setErrors(['重新授權失敗，請稍後再試。'])
     }
   }
 
@@ -231,12 +264,19 @@ export default function PublishPage() {
         ) : (
           <div className="flex items-center gap-4 flex-wrap">
             <StatusBadge connected={!!igStatus?.connected} igUsername={igStatus?.ig_username} />
-            {!igStatus?.connected && (
+            {!igStatus?.connected ? (
               <button
                 onClick={handleConnect}
                 className="px-4 py-2 bg-black text-white text-sm font-medium rounded-xl hover:bg-gray-800 transition-colors"
               >
                 連結 Instagram 帳號
+              </button>
+            ) : (
+              <button
+                onClick={handleReconnect}
+                className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-xl hover:bg-gray-100 transition-colors text-gray-600"
+              >
+                重新授權 Meta OAuth
               </button>
             )}
           </div>
