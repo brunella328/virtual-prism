@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from app.models.persona import AppearanceFeatures, PersonaCard, PersonaResponse
 import uuid
 import base64
+from typing import Optional
 
 load_dotenv()
 
@@ -37,8 +38,11 @@ APPEARANCE_PROMPT = """你是一個專業的角色視覺分析師，專門為 AI
 }
 重要：image_prompt 必須極度詳細，讓 AI 生圖模型能在不同場景中生成同一個人。"""
 
-async def create_persona(description: str) -> dict:
-    """T3: 一句話 → 人設 JSON"""
+async def create_persona(description: str, persona_id: Optional[str] = None) -> dict:
+    """T3: 一句話 → 人設 JSON
+    
+    persona_id: if provided (e.g. ig_user_id), use it; otherwise auto-generate UUID.
+    """
     message = await client_anthropic.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=1024,
@@ -50,10 +54,10 @@ async def create_persona(description: str) -> dict:
     
     raw = message.content[0].text
     persona_data = json.loads(raw)
-    persona_id = str(uuid.uuid4())
+    pid = persona_id or str(uuid.uuid4())
     
     return {
-        "persona_id": persona_id,
+        "persona_id": pid,
         "persona": PersonaCard(**persona_data)
     }
 

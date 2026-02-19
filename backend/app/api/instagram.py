@@ -65,21 +65,27 @@ async def oauth_callback(
     Facebook redirects here after the user grants permission.
     Exchanges the code for a long-lived token and redirects to the frontend.
     """
+    frontend_url = svc.FRONTEND_URL
+
     if error:
         logger.warning("OAuth error: %s — %s", error, error_description)
-        frontend_url = svc.FRONTEND_URL
-        return RedirectResponse(url=f"{frontend_url}/publish?error={error}&persona_id={state}")
+        return RedirectResponse(
+            url=f"{frontend_url}/auth/callback?error={error}&error_description={error_description or ''}"
+        )
 
     try:
         info = svc.exchange_code_for_token(code, state)
-        persona_id = state
-        frontend_url = svc.FRONTEND_URL
+        ig_user_id = info.get("ig_account_id", state)
+        ig_username = info.get("ig_username", "")
+        # Redirect to frontend /auth/callback — stores session in localStorage
         return RedirectResponse(
-            url=f"{frontend_url}/publish?connected=true&persona_id={persona_id}&ig_username={info.get('ig_username', '')}"
+            url=f"{frontend_url}/auth/callback?ig_user_id={ig_user_id}&ig_username={ig_username}"
         )
     except Exception as e:
         logger.exception("Token exchange failed")
-        raise HTTPException(status_code=500, detail=f"Token exchange failed: {e}")
+        return RedirectResponse(
+            url=f"{frontend_url}/auth/callback?error=token_exchange_failed&error_description={str(e)[:200]}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -123,10 +129,11 @@ async def create_schedule(body: ScheduleRequest):
         if publish_at.tzinfo is None:
             publish_at = publish_at.replace(tzinfo=timezone.utc)
 
-        if publish_at <= datetime.now(timezone.utc):
+        # Allow 60-second grace for clock skew
+        if publish_at <= datetime.now(timezone.utc).replace(second=0, microsecond=0):
             raise HTTPException(
                 status_code=400,
-                detail=f"publish_at must be in the future. Got: {post.publish_at.isoformat()}",
+                detail=f"排程時間必須是未來時間。收到：{post.publish_at.isoformat()}（請選擇至少 1 分鐘後的時間）",
             )
 
         job_id = svc.schedule_post(

@@ -14,8 +14,13 @@ import {
   type ScheduledJobInfo,
 } from '@/lib/api'
 
-// persona_id = 'default' 對應後端 env token 預設值
-const PERSONA_ID = 'default'
+// A7: 動態 persona_id — 優先用已登入的 ig_user_id，fallback to 'default'
+const getPersonaId = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('vp_user_id') || 'default'
+  }
+  return 'default'
+}
 
 type Post = {
   id: number
@@ -55,6 +60,13 @@ function StatusBadge({ connected, igUsername }: { connected: boolean; igUsername
 // ---------------------------------------------------------------------------
 
 export default function PublishPage() {
+  // A7: 動態 persona_id
+  const [personaId, setPersonaId] = useState<string>('default')
+
+  useEffect(() => {
+    setPersonaId(getPersonaId())
+  }, [])
+
   // 從 localStorage 讀取 Dashboard 傳過來的已核准貼文
   const [posts, setPosts] = useState<Post[]>([])
 
@@ -117,21 +129,23 @@ export default function PublishPage() {
 
   // Load IG connection status
   useEffect(() => {
+    if (!personaId) return
     setStatusLoading(true)
-    getInstagramStatus(PERSONA_ID)
+    getInstagramStatus(personaId)
       .then(setIgStatus)
       .catch(() => setIgStatus({ connected: false }))
       .finally(() => setStatusLoading(false))
-  }, [])
+  }, [personaId])
 
   // Load scheduled jobs
   const loadScheduledJobs = useCallback(() => {
+    if (!personaId) return
     setJobsLoading(true)
-    getScheduledPosts(PERSONA_ID)
+    getScheduledPosts(personaId)
       .then(data => setScheduledJobs(data.scheduled_posts))
       .catch(() => setScheduledJobs([]))
       .finally(() => setJobsLoading(false))
-  }, [])
+  }, [personaId])
 
   useEffect(() => {
     loadScheduledJobs()
@@ -140,7 +154,7 @@ export default function PublishPage() {
   // Connect IG account (OAuth)
   const handleConnect = async () => {
     try {
-      const data = await getInstagramAuthUrl(PERSONA_ID)
+      const data = await getInstagramAuthUrl(personaId)
       window.location.href = data.auth_url
     } catch {
       setErrors(['無法取得授權網址，請確認後端設定了 INSTAGRAM_APP_ID。'])
@@ -152,8 +166,11 @@ export default function PublishPage() {
     setErrors([])
     setSuccessMsg('')
     try {
-      await disconnectInstagram(PERSONA_ID)
-      const data = await getInstagramAuthUrl(PERSONA_ID)
+      await disconnectInstagram(personaId)
+      // A8: 清除本地 session，重新 OAuth 後會以新帳號作為 persona_id
+      localStorage.removeItem('vp_user_id')
+      localStorage.removeItem('vp_ig_username')
+      const data = await getInstagramAuthUrl(personaId)
       window.location.href = data.auth_url
     } catch {
       setErrors(['重新授權失敗，請稍後再試。'])
@@ -170,7 +187,7 @@ export default function PublishPage() {
     setErrors([])
     setSuccessMsg('')
     try {
-      const result = await publishNow(PERSONA_ID, post.image_url, post.caption)
+      const result = await publishNow(personaId, post.image_url, post.caption)
       setSuccessMsg(`✅ 已發布！Media ID: ${result.media_id}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -204,7 +221,7 @@ export default function PublishPage() {
     setErrors([])
     setSuccessMsg('')
     try {
-      const result = await scheduleInstagramPosts(PERSONA_ID, postsToSchedule)
+      const result = await scheduleInstagramPosts(personaId, postsToSchedule)
       setSuccessMsg(`✅ 已排程 ${result.count} 則貼文！`)
       loadScheduledJobs()
     } catch (e: unknown) {

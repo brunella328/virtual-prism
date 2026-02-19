@@ -12,6 +12,14 @@ export default function DashboardPage() {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
+  // A6: 登入守衛
+  useEffect(() => {
+    const userId = localStorage.getItem('vp_user_id')
+    if (!userId) {
+      router.replace('/')
+    }
+  }, [router])
+
   useEffect(() => {
     // 優先從 localStorage 讀取已存在的排程，避免每次進頁面都重新生成
     const cached = localStorage.getItem('vp_schedule')

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import List
+from typing import List, Optional
 from app.models.persona import PersonaCreate, PersonaCard, PersonaResponse
 from app.services import genesis_service
 
@@ -17,9 +17,13 @@ async def analyze_appearance(
 @router.post("/create-persona")
 async def create_persona(
     description: str = Form(...),
+    persona_id: Optional[str] = Form(None),
 ):
-    """T3: 人設稜鏡 — 一句話描述生成完整人設 JSON"""
-    return await genesis_service.create_persona(description)
+    """T3: 人設稜鏡 — 一句話描述生成完整人設 JSON
+    
+    persona_id: optional, pass ig_user_id to link persona to IG account.
+    """
+    return await genesis_service.create_persona(description, persona_id)
 
 @router.post("/confirm-persona")
 async def confirm_persona(persona: PersonaCard):

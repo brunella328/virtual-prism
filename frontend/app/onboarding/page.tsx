@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface AppearanceData {
@@ -29,6 +29,15 @@ interface PersonaResult {
 
 export default function OnboardingPage() {
   const router = useRouter()
+
+  // A5: 登入守衛 — 未登入導向首頁
+  useEffect(() => {
+    const userId = localStorage.getItem('vp_user_id')
+    if (!userId) {
+      router.replace('/')
+    }
+  }, [router])
+
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<FileList | null>(null)
   const [previews, setPreviews] = useState<string[]>([])
@@ -64,8 +73,11 @@ export default function OnboardingPage() {
       }
 
       // T3: 人設稜鏡
+      // A5: 用 ig_user_id 作為 persona_id（如果已登入）
+      const igUserId = localStorage.getItem('vp_user_id')
       const formData2 = new FormData()
       formData2.append('description', description)
+      if (igUserId) formData2.append('persona_id', igUserId)
       const personaRes = await fetch(`${API}/api/genesis/create-persona`, {
         method: 'POST',
         body: formData2,
