@@ -7,6 +7,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 export default function Home() {
   const [igUsername, setIgUsername] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem('vp_ig_username')
@@ -15,14 +16,19 @@ export default function Home() {
 
   const handleIgLogin = async () => {
     setLoading(true)
+    setError(null)
     try {
       const resp = await fetch(`${API_URL}/api/instagram/auth?persona_id=default`)
+      if (!resp.ok) throw new Error(`後端錯誤 ${resp.status}`)
       const data = await resp.json()
       if (data.auth_url) {
         window.location.href = data.auth_url
+      } else {
+        throw new Error('未取得授權連結')
       }
     } catch (e) {
       console.error('Failed to get auth URL', e)
+      setError(e instanceof Error ? e.message : '連線失敗，請確認後端服務正常後重試')
       setLoading(false)
     }
   }
@@ -41,6 +47,10 @@ export default function Home() {
     <main className="min-h-screen flex flex-col items-center justify-center gap-6">
       <h1 className="text-4xl font-bold">Virtual Prism 🌈</h1>
       <p className="text-gray-500">B2B AI 虛擬網紅自動化營運平台</p>
+
+      {error && (
+        <p className="text-red-500 text-sm bg-red-50 px-4 py-2 rounded-lg">⚠️ {error}</p>
+      )}
 
       {igUsername ? (
         <div className="flex flex-col items-center gap-3">
