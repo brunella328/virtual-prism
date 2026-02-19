@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 function CallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -11,43 +13,74 @@ function CallbackContent() {
   const [message, setMessage] = useState('處理 Instagram 授權中...')
 
   useEffect(() => {
-    const igUserId = searchParams.get('ig_user_id')
-    const igUsername = searchParams.get('ig_username')
+    const code = searchParams.get('code')
+    const state = searchParams.get('state')
     const error = searchParams.get('error')
 
+    // Handle direct error redirect from backend
     if (error) {
       setStatus('error')
-      setMessage(`授權失敗：${searchParams.get('error_description') || error}`)
+      const desc = searchParams.get('error_description') || error
+      setMessage(`授權失敗：${decodeURIComponent(desc)}`)
       return
     }
 
-    if (!igUserId) {
-      setStatus('error')
-      setMessage('授權失敗：未收到用戶 ID，請重試')
+    // Handle OAuth code from Instagram (frontend-first flow)
+    if (code) {
+      // Exchange code via backend
+      fetch(`${API_URL}/api/instagram/exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          state: state || 'default',
+          redirect_uri: `${window.location.origin}/auth/callback`,
+        }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ig_account_id || data.ig_username) {
+            const igUserId = data.ig_account_id
+            const igUsername = data.ig_username || 'ig_user'
+            localStorage.setItem('vp_user_id', igUserId)
+            localStorage.setItem('vp_ig_username', igUsername)
+            setStatus('success')
+            setMessage(`✅ 成功連結 @${igUsername}，正在跳轉...`)
+            setTimeout(() => router.push('/onboarding'), 1500)
+          } else {
+            throw new Error(data.detail || JSON.stringify(data))
+          }
+        })
+        .catch(e => {
+          setStatus('error')
+          setMessage(`授權失敗：${e.message}`)
+        })
       return
     }
 
-    // Store session
-    localStorage.setItem('vp_user_id', igUserId)
-    localStorage.setItem('vp_ig_username', igUsername || 'ig_user')
+    // Handle ig_user_id passed directly from backend redirect (legacy)
+    const igUserId = searchParams.get('ig_user_id')
+    const igUsername = searchParams.get('ig_username')
 
-    setStatus('success')
-    setMessage(`✅ 成功連結 @${igUsername || igUserId}，正在跳轉...`)
+    if (igUserId) {
+      localStorage.setItem('vp_user_id', igUserId)
+      localStorage.setItem('vp_ig_username', igUsername || 'ig_user')
+      setStatus('success')
+      setMessage(`✅ 成功連結 @${igUsername || igUserId}，正在跳轉...`)
+      setTimeout(() => router.push('/onboarding'), 1500)
+      return
+    }
 
-    // Redirect to onboarding after 1.5s
-    setTimeout(() => {
-      router.push('/onboarding')
-    }, 1500)
+    setStatus('error')
+    setMessage('未收到授權資料，請重試')
   }, [searchParams, router])
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-4">
       <h1 className="text-2xl font-bold">Instagram 授權</h1>
-      <div
-        className={`text-lg ${
-          status === 'error' ? 'text-red-500' : status === 'success' ? 'text-green-600' : 'text-gray-500'
-        }`}
-      >
+      <div className={`text-lg ${
+        status === 'error' ? 'text-red-500' : status === 'success' ? 'text-green-600' : 'text-gray-500'
+      }`}>
         {status === 'processing' && <span className="animate-pulse">⏳ </span>}
         {message}
       </div>

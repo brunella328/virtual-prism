@@ -105,6 +105,32 @@ async def disconnect(persona_id: str):
     return {"disconnected": removed, "persona_id": persona_id}
 
 
+class ExchangeRequest(BaseModel):
+    code: str
+    state: str = "default"
+    redirect_uri: str
+
+
+@router.post("/exchange")
+async def exchange_code(req: ExchangeRequest):
+    """
+    Frontend-first OAuth: frontend receives code, POSTs here for token exchange.
+    redirect_uri must match exactly what was used in the OAuth dialog.
+    """
+    try:
+        # Override REDIRECT_URI with the one from the request (set by frontend)
+        original_redirect = svc.REDIRECT_URI
+        svc.REDIRECT_URI = req.redirect_uri
+        try:
+            info = svc.exchange_code_for_token(req.code, req.state)
+        finally:
+            svc.REDIRECT_URI = original_redirect
+        return info
+    except Exception as e:
+        logger.exception("Exchange failed")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ---------------------------------------------------------------------------
 # Scheduling
 # ---------------------------------------------------------------------------

@@ -36,7 +36,7 @@ GRAPH_URL = "https://graph.facebook.com/v19.0"
 IG_GRAPH_URL = "https://graph.instagram.com/v19.0"  # for IGAA tokens (Basic Display / Creator)
 
 # Instagram API with Instagram Login (replaces Facebook Login for Creator accounts)
-IG_OAUTH_URL = "https://api.instagram.com/oauth/authorize"
+IG_OAUTH_URL = "https://www.instagram.com/oauth/authorize"
 IG_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 IG_LONG_LIVED_URL = "https://graph.instagram.com/access_token"
 IG_ME_URL = "https://graph.instagram.com/me"
@@ -250,6 +250,11 @@ def exchange_code_for_token(code: str, state: str) -> dict:
         raise ValueError("INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET not configured")
 
     # 1. Short-lived token (Instagram token endpoint)
+    print(f"[DEBUG] token exchange → URL: {IG_TOKEN_URL}", flush=True)
+    print(f"[DEBUG] client_id={INSTAGRAM_APP_ID}", flush=True)
+    print(f"[DEBUG] redirect_uri={REDIRECT_URI}", flush=True)
+    print(f"[DEBUG] code={code[:30]}...", flush=True)
+
     resp = requests.post(IG_TOKEN_URL, data={
         "client_id": INSTAGRAM_APP_ID,
         "client_secret": INSTAGRAM_APP_SECRET,
@@ -257,7 +262,9 @@ def exchange_code_for_token(code: str, state: str) -> dict:
         "redirect_uri": REDIRECT_URI,
         "code": code,
     }, timeout=10)
-    resp.raise_for_status()
+    if not resp.ok:
+        logger.error("IG token exchange failed: status=%s body=%s", resp.status_code, resp.text)
+        raise RuntimeError(f"IG token exchange {resp.status_code}: {resp.text}")
     short_data = resp.json()
     short_token = short_data.get("access_token")
     if not short_token:
