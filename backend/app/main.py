@@ -4,17 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import genesis, life_stream, interact, image, instagram, fans
-from app.services.instagram_service import get_scheduler
+from app.services.instagram_service import get_scheduler, start_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start APScheduler on startup
-    scheduler = get_scheduler()
-    if not scheduler.running:
-        scheduler.start()
+    # Start APScheduler + register token refresh jobs on startup
+    start_scheduler()
     yield
     # Graceful shutdown
+    scheduler = get_scheduler()
     if scheduler.running:
         scheduler.shutdown(wait=False)
 

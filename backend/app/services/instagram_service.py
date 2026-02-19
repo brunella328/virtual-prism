@@ -26,6 +26,9 @@ INSTAGRAM_APP_SECRET = os.getenv("INSTAGRAM_APP_SECRET", "")
 REDIRECT_URI = os.getenv("INSTAGRAM_REDIRECT_URI", "http://localhost:8000/api/instagram/callback")
 FRONTEND_URL = os.getenv("NEXT_PUBLIC_FRONTEND_URL", "http://localhost:3000")
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
 FB_OAUTH_URL = "https://www.facebook.com/v19.0/dialog/oauth"
 FB_TOKEN_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
 FB_LONG_LIVED_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
@@ -73,6 +76,136 @@ _scheduler = BackgroundScheduler(
 
 def get_scheduler() -> BackgroundScheduler:
     return _scheduler
+
+
+def start_scheduler() -> None:
+    """Start APScheduler and register token refresh jobs.
+    Called from application lifespan/startup."""
+    if not _scheduler.running:
+        _scheduler.start()
+        logger.info("APScheduler started")
+    _schedule_token_refresh_jobs()
+
+
+# ---------------------------------------------------------------------------
+# Telegram notifications
+# ---------------------------------------------------------------------------
+
+def _send_telegram(message: str) -> None:
+    """Send a message via Telegram Bot API.  Fire-and-forget; logs errors."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.warning("Telegram not configured (missing BOT_TOKEN or CHAT_ID), skipping notification")
+        return
+    try:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"},
+            timeout=10,
+        )
+        if not resp.ok:
+            logger.warning("Telegram send failed: %s", resp.text)
+    except Exception as e:
+        logger.warning("Telegram send exception: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# Token auto-refresh (C1 + C2)
+# ---------------------------------------------------------------------------
+
+def refresh_instagram_token(persona_id: str = "default") -> None:
+    """
+    Refresh the IGAA long-lived token for a persona.
+    Called by APScheduler every 50 days.
+    On success: updates _token_store and .env (for restart persistence).
+    On failure: sends Telegram notification.
+    """
+    info = _token_store.get(persona_id)
+    if not info:
+        logger.warning("refresh_instagram_token: no token found for persona_id=%s, skipping", persona_id)
+        return
+
+    access_token = info.get("access_token", "")
+    if not access_token:
+        _send_telegram(
+            f"⚠️ *Virtual Prism - Token 刷新失敗*\n\n"
+            f"persona_id: `{persona_id}`\n"
+            f"原因: token store 中無 access_token\n"
+            f"請手動重新授權"
+        )
+        return
+
+    logger.info("Refreshing IGAA token for persona_id=%s ...", persona_id)
+    try:
+        resp = requests.get(
+            "https://graph.instagram.com/refresh_access_token",
+            params={
+                "grant_type": "ig_refresh_token",
+                "access_token": access_token,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        new_token = data.get("access_token")
+        expires_in = data.get("expires_in", 5183944)  # ~60 days default
+
+        if not new_token:
+            raise RuntimeError(f"Refresh response missing access_token: {data}")
+
+        # Update in-memory store
+        _token_store[persona_id]["access_token"] = new_token
+        _token_store[persona_id]["refreshed_at"] = datetime.now(timezone.utc).isoformat()
+        _token_store[persona_id]["expires_in"] = expires_in
+
+        # Update .env for restart persistence (overwrite INSTAGRAM_ACCESS_TOKEN line)
+        env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+        env_path = os.path.abspath(env_path)
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+            with open(env_path, "w") as f:
+                for line in lines:
+                    if line.startswith("INSTAGRAM_ACCESS_TOKEN="):
+                        f.write(f"INSTAGRAM_ACCESS_TOKEN={new_token}\n")
+                    else:
+                        f.write(line)
+            logger.info("Updated INSTAGRAM_ACCESS_TOKEN in .env")
+
+        logger.info("Token refreshed successfully for persona_id=%s", persona_id)
+        _send_telegram(
+            f"✅ *Virtual Prism - Token 自動刷新成功*\n\n"
+            f"persona_id: `{persona_id}`\n"
+            f"有效期: 約 {expires_in // 86400} 天\n"
+            f"下次刷新: 50 天後"
+        )
+
+    except Exception as e:
+        logger.error("Token refresh failed for persona_id=%s: %s", persona_id, e)
+        _send_telegram(
+            f"🚨 *Virtual Prism - Token 刷新失敗！*\n\n"
+            f"persona_id: `{persona_id}`\n"
+            f"錯誤: `{str(e)[:200]}`\n\n"
+            f"請盡快手動刷新 token，或重新走 OAuth 流程！"
+        )
+
+
+def _schedule_token_refresh_jobs() -> None:
+    """Register token refresh jobs for all personas currently in token store.
+    Called once at startup after token store is pre-seeded."""
+    for persona_id in list(_token_store.keys()):
+        job_id = f"ig_token_refresh_{persona_id}"
+        if not _scheduler.get_job(job_id):
+            _scheduler.add_job(
+                refresh_instagram_token,
+                trigger="interval",
+                days=50,
+                args=[persona_id],
+                id=job_id,
+                name=f"IG token refresh ({persona_id})",
+                replace_existing=True,
+                misfire_grace_time=3600,
+            )
+            logger.info("Scheduled token refresh job for persona_id=%s (every 50 days)", persona_id)
 
 
 # ---------------------------------------------------------------------------
@@ -377,31 +510,10 @@ def _execute_publish(persona_id: str, image_url: str, caption: str) -> str:
     access_token = info["access_token"]
     ig_account_id = info["ig_account_id"]
 
-    # Primary attempt with stored token
-    primary_err_msg = None
-    try:
-        creation_id = upload_photo(ig_account_id, image_url, caption, access_token)
-        media_id = publish_media(ig_account_id, creation_id, access_token)
-        logger.info("Published media_id=%s for persona_id=%s", media_id, persona_id)
-        return media_id
-    except Exception as e:
-        primary_err_msg = str(e)
-        logger.warning("Primary token failed (%s), trying env fallback token", e)
-
-    # Fallback: use env INSTAGRAM_ACCESS_TOKEN if available and different from current
-    env_token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
-    env_user_id = os.getenv("INSTAGRAM_USER_ID", "")
-    if env_token and env_token != access_token and env_user_id:
-        logger.info("Retrying publish with env access token (ig_account_id=%s)", env_user_id)
-        creation_id = upload_photo(env_user_id, image_url, caption, env_token)
-        media_id = publish_media(env_user_id, creation_id, env_token)
-        logger.info("Published via env token: media_id=%s for persona_id=%s", media_id, persona_id)
-        # Update stored token to working env token for next time
-        _token_store[persona_id]["access_token"] = env_token
-        _token_store[persona_id]["ig_account_id"] = env_user_id
-        return media_id
-
-    raise RuntimeError(f"發布失敗，env token 也無法使用或未設定。原始錯誤：{primary_err_msg}")
+    creation_id = upload_photo(ig_account_id, image_url, caption, access_token)
+    media_id = publish_media(ig_account_id, creation_id, access_token)
+    logger.info("Published media_id=%s for persona_id=%s", media_id, persona_id)
+    return media_id
 
 
 # ---------------------------------------------------------------------------
