@@ -35,7 +35,13 @@ FB_LONG_LIVED_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
 GRAPH_URL = "https://graph.facebook.com/v19.0"
 IG_GRAPH_URL = "https://graph.instagram.com/v19.0"  # for IGAA tokens (Basic Display / Creator)
 
-OAUTH_SCOPE = "instagram_basic,instagram_content_publish,pages_read_engagement,pages_show_list"
+# Instagram API with Instagram Login (replaces Facebook Login for Creator accounts)
+IG_OAUTH_URL = "https://api.instagram.com/oauth/authorize"
+IG_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
+IG_LONG_LIVED_URL = "https://graph.instagram.com/access_token"
+IG_ME_URL = "https://graph.instagram.com/me"
+
+OAUTH_SCOPE = "instagram_business_basic,instagram_business_content_publish"
 
 # ---------------------------------------------------------------------------
 # In-memory stores  (replace with DB for production)
@@ -213,7 +219,9 @@ def _schedule_token_refresh_jobs() -> None:
 # ---------------------------------------------------------------------------
 
 def get_auth_url(persona_id: str) -> str:
-    """Return the Facebook OAuth dialog URL for a given persona."""
+    """Return the Instagram OAuth dialog URL for a given persona.
+    Uses Instagram API with Instagram Login (supports Creator + Business accounts).
+    """
     if not INSTAGRAM_APP_ID:
         raise ValueError("INSTAGRAM_APP_ID is not configured")
 
@@ -225,21 +233,27 @@ def get_auth_url(persona_id: str) -> str:
         "state": persona_id,  # use persona_id as state for CSRF + routing
     }
     query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"{FB_OAUTH_URL}?{query}"
+    return f"{IG_OAUTH_URL}?{query}"
 
 
 def exchange_code_for_token(code: str, state: str) -> dict:
     """
-    Exchange the OAuth code for a short-lived token, then upgrade to
-    a long-lived token (~60 days).  Stores the token and returns info.
+    Exchange the OAuth code for a short-lived token via Instagram API with Instagram Login,
+    then upgrade to a long-lived token (~60 days).  Stores the token and returns info.
+
+    Flow (Instagram API with Instagram Login):
+    1. POST api.instagram.com/oauth/access_token  → short-lived IGAA token
+    2. GET graph.instagram.com/access_token       → long-lived IGAA token (ig_exchange_token)
+    3. GET graph.instagram.com/me                 → ig_user_id + username
     """
     if not INSTAGRAM_APP_ID or not INSTAGRAM_APP_SECRET:
         raise ValueError("INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET not configured")
 
-    # 1. Short-lived token
-    resp = requests.get(FB_TOKEN_URL, params={
+    # 1. Short-lived token (Instagram token endpoint)
+    resp = requests.post(IG_TOKEN_URL, data={
         "client_id": INSTAGRAM_APP_ID,
         "client_secret": INSTAGRAM_APP_SECRET,
+        "grant_type": "authorization_code",
         "redirect_uri": REDIRECT_URI,
         "code": code,
     }, timeout=10)
@@ -247,20 +261,21 @@ def exchange_code_for_token(code: str, state: str) -> dict:
     short_data = resp.json()
     short_token = short_data.get("access_token")
     if not short_token:
-        raise RuntimeError(f"Failed to get short-lived token: {short_data}")
+        raise RuntimeError(f"Failed to get short-lived IG token: {short_data}")
+    logger.info("Short-lived IGAA token obtained for state=%s", state)
 
-    # 2. Long-lived token (60 days)
-    resp2 = requests.get(FB_LONG_LIVED_URL, params={
-        "grant_type": "fb_exchange_token",
-        "client_id": INSTAGRAM_APP_ID,
+    # 2. Long-lived token (~60 days) via graph.instagram.com
+    resp2 = requests.get(IG_LONG_LIVED_URL, params={
+        "grant_type": "ig_exchange_token",
         "client_secret": INSTAGRAM_APP_SECRET,
-        "fb_exchange_token": short_token,
+        "access_token": short_token,
     }, timeout=10)
     resp2.raise_for_status()
     long_data = resp2.json()
     long_token = long_data.get("access_token")
     if not long_token:
-        raise RuntimeError(f"Failed to get long-lived token: {long_data}")
+        raise RuntimeError(f"Failed to get long-lived IGAA token: {long_data}")
+    logger.info("Long-lived IGAA token obtained")
 
     # 3. Fetch IG account info
     ig_account_id, ig_username = get_instagram_account_id(long_token)
@@ -274,17 +289,45 @@ def exchange_code_for_token(code: str, state: str) -> dict:
         "expires_in": long_data.get("expires_in", 5183944),
         "connected_at": datetime.now(timezone.utc).isoformat(),
     }
-    logger.info("Token stored for persona_id=%s ig_account_id=%s", persona_id, ig_account_id)
+
+    # 5. Register token refresh job for this persona
+    _schedule_token_refresh_jobs()
+
+    logger.info("Token stored for persona_id=%s ig_account_id=%s username=%s",
+                persona_id, ig_account_id, ig_username)
     return _token_store[persona_id]
 
 
 def get_instagram_account_id(access_token: str) -> tuple[str, str]:
     """
     Return (ig_account_id, ig_username) for the authenticated user.
-    Strategy 1: /me/accounts → pages → instagram_business_account (Business)
-    Strategy 2: /me?fields=instagram_business_account (Creator / direct link)
+
+    For IGAA tokens (Instagram API with Instagram Login):
+      → graph.instagram.com/me?fields=user_id,username
+
+    For EAA tokens (Facebook Graph API, Business accounts):
+      → Strategy 1: /me/accounts → pages → instagram_business_account
+      → Strategy 2: /me?fields=instagram_business_account (Creator / direct link)
     """
-    # --- Strategy 1: via Facebook Pages ---
+    # --- IGAA token path (Instagram API with Instagram Login) ---
+    if access_token.startswith("IGAA"):
+        try:
+            resp = requests.get(f"{IG_ME_URL}", params={
+                "fields": "user_id,username",
+                "access_token": access_token,
+            }, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            logger.info("graph.instagram.com/me response: %s", data)
+            user_id = data.get("user_id") or data.get("id")
+            username = data.get("username", "")
+            if user_id:
+                return str(user_id), username
+        except Exception as e:
+            logger.warning("IGAA /me lookup failed: %s", e)
+
+    # --- EAA token path (Facebook Graph API, Business accounts) ---
+    # Strategy 1: via Facebook Pages
     try:
         resp = requests.get(f"{GRAPH_URL}/me/accounts", params={
             "access_token": access_token,
@@ -303,7 +346,7 @@ def get_instagram_account_id(access_token: str) -> tuple[str, str]:
     except Exception as e:
         logger.warning("Strategy 1 (via Pages) failed: %s", e)
 
-    # --- Strategy 2: /me → instagram_business_account (Creator accounts) ---
+    # Strategy 2: /me → instagram_business_account (Creator accounts)
     try:
         resp2 = requests.get(f"{GRAPH_URL}/me", params={
             "access_token": access_token,
@@ -318,31 +361,17 @@ def get_instagram_account_id(access_token: str) -> tuple[str, str]:
     except Exception as e:
         logger.warning("Strategy 2 (/me direct) failed: %s", e)
 
-    # --- Strategy 3: use INSTAGRAM_USER_ID from env as fallback ---
+    # --- Fallback: use INSTAGRAM_USER_ID from env ---
     env_user_id = os.getenv("INSTAGRAM_USER_ID", "")
     if env_user_id:
         logger.warning("Falling back to INSTAGRAM_USER_ID from env: %s", env_user_id)
-        # Try to get username via IG user ID using the new OAuth token
-        try:
-            resp3 = requests.get(f"{GRAPH_URL}/{env_user_id}", params={
-                "access_token": access_token,
-                "fields": "id,username,name",
-            }, timeout=10)
-            resp3.raise_for_status()
-            ig_data = resp3.json()
-            logger.info("Strategy 3 result: %s", ig_data)
-            return ig_data["id"], ig_data.get("username") or ig_data.get("name") or "ig_user"
-        except Exception as e:
-            logger.warning("Strategy 3 (env user_id lookup) failed: %s", e)
-        # Last resort: env ID with env username (Creator account typical path)
         return env_user_id, _ENV_USERNAME or "unknown"
 
     raise RuntimeError(
         "找不到 Instagram 帳號。請確認：\n"
         "1. IG 帳號已切換為「專業帳號」（創作者或商業帳號）\n"
-        "2. IG 帳號已在 Facebook 粉絲專頁設定中連結\n"
-        "3. Meta App 已設定為「上線」模式（非開發模式）\n"
-        "4. OAuth 授權時有選取正確的粉絲專頁"
+        "2. OAuth 使用 Instagram API with Instagram Login（非 Facebook Login）\n"
+        "3. Meta App 開發模式下，用測試帳號授權"
     )
 
 
