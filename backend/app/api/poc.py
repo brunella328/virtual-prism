@@ -17,19 +17,21 @@ router = APIRouter(prefix="/poc", tags=["POC"])
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 REPLICATE_BASE = "https://api.replicate.com/v1"
 
-REALISM_V4_LIFELIKE = (
+REALISM_V5_IMPERFECT_LIGHT = (
     "low-quality grainy photo, shot on older iPhone with shaky hand-held motion blur, "
     "high ISO noise, slightly out of focus, lens smudge, purple fringing, "
-    "mixed lighting with ugly yellow-green color cast, flickering fluorescent overhead, "
-    "low dynamic range, awkwardly cropped, messy shadows, "
+    "harsh uneven lighting, strong shadows on one side of face, dark underexposed areas, "
+    "mixed light sources creating ugly yellow-green color cast, flickering fluorescent overhead, "
+    "blocked shadows, crushed blacks, lost detail in dark areas, "
+    "low dynamic range, awkwardly cropped, half face in shadow, "
     "small mole on cheek, uneven skin pigmentation, minor acne scar near chin, stray hair strands stuck to face, "
     "mouth slightly open mid-sentence, eyes looking at something off-camera with natural gaze direction, "
     "wearing cheap oxidized silver necklace, simple ring on finger, "
     "wrinkled t-shirt with small coffee stain near collar, fabric creases from sitting, "
-    "background with optical noise, messy bokeh with hard edges, lens distortion, "
-    "chromatic aberration at edges, digital artifacts, underexposed shadows, "
-    "blown-out highlights, natural flyaways covering parts of face, "
-    "accidental snapshot, candid unstaged moment"
+    "background slightly blurred but still recognizable, shallow depth of field f/2.8, "
+    "background details visible through soft blur, not completely out of focus, "
+    "lens distortion, chromatic aberration at edges, digital artifacts, "
+    "natural flyaways covering parts of face, accidental snapshot, candid unstaged moment"
 )
 
 NEGATIVE_PROMPT = (
@@ -74,8 +76,8 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     """測試 flux-schnell（現用基準）"""
     start_time = time.time()
     
-    # 加入生活感細節優化 suffix
-    optimized_prompt = f"{prompt}, {REALISM_V4_LIFELIKE}"
+    # 加入不完美光線優化 suffix
+    optimized_prompt = f"{prompt}, {REALISM_V5_IMPERFECT_LIGHT}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -132,11 +134,11 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
 
 
 async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
-    """測試 flux-dev-realism (V4生活感細節：痣+配件+髒污+視線目標)"""
+    """測試 flux-dev-realism (V5不完美光線：強陰影+暗部+背景可辨識)"""
     start_time = time.time()
     
-    # 加入生活感細節 (V4: 痣+廉價配件+咖啡漬+眼神看著東西)
-    optimized_prompt = f"{prompt}, {REALISM_V4_LIFELIKE}"
+    # 加入不完美光線 (V5: 強陰影+暗部細節丟失+背景降低虛化)
+    optimized_prompt = f"{prompt}, {REALISM_V5_IMPERFECT_LIGHT}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -196,8 +198,8 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
     """測試 flux-cinestill"""
     start_time = time.time()
     
-    # 加入 CNSTLL trigger word + 生活感細節
-    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V4_LIFELIKE}"
+    # 加入 CNSTLL trigger word + 不完美光線
+    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V5_IMPERFECT_LIGHT}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",

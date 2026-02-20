@@ -57,13 +57,13 @@ export default function ModelComparisonPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            🔬 Flux Realism POC (V4生活感細節版)
+            🔬 Flux Realism POC (V5不完美光線版)
           </h1>
           <p className="text-gray-600 mb-1">
-            flux-dev-realism + 生活感細節（痣+廉價配件+髒污+視線目標）
+            flux-dev-realism + 不完美光線（強陰影+暗部+背景可辨識）
           </p>
           <p className="text-sm text-gray-500">
-            CFG 2.5 | Steps 28 | 成功元素：臉部瑕疵+配件磨損+衣物髒污+自然眼神
+            CFG 2.5 | Steps 28 | 強陰影+crushed blacks+背景f/2.8淺景深（不過度虛化）
           </p>
         </div>
 
@@ -71,7 +71,7 @@ export default function ModelComparisonPage() {
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              測試場景（V4生活感細節版）
+              測試場景（V5不完美光線版）
             </label>
             <div className="flex gap-3 mb-4 flex-wrap">
               <button
@@ -82,7 +82,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                👤 咖啡廳（痣+配件+咖啡漬）
+                👤 咖啡廳（半臉陰影+暗部）
               </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.outdoor)}
@@ -92,7 +92,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                🌃 夜市（視線看攤位+配件）
+                🌃 夜市（強陰影+背景可見）
               </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.extreme)}
@@ -102,7 +102,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                🍜 極限測試（醬汁漬+看麵）
+                🍜 極限測試（暗部丟失細節）
               </button>
             </div>
             <textarea
@@ -185,10 +185,10 @@ export default function ModelComparisonPage() {
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent"></div>
             <p className="mt-4 text-gray-600">
-              正在生成圖片（生活感細節優化中）...
+              正在生成圖片（不完美光線優化中）...
               <br />
               <span className="text-sm text-gray-500">
-                (flux-dev-realism | CFG 2.5 | Steps 28 | 痣+配件+髒污 | 預計 30-40 秒)
+                (flux-dev-realism | CFG 2.5 | Steps 28 | 強陰影+暗部+背景可見 | 預計 30-40 秒)
               </span>
             </p>
           </div>
