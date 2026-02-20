@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import genesis, life_stream, interact, image, instagram, fans
+from app.api import genesis, life_stream, interact, image, instagram, fans, poc
 from app.services.instagram_service import get_scheduler, start_scheduler
 
 
@@ -39,6 +39,7 @@ app.include_router(life_stream.router, prefix="/api/life-stream", tags=["Life St
 app.include_router(interact.router, prefix="/api/interact", tags=["Interaction Hub"])
 app.include_router(instagram.router, prefix="/api/instagram", tags=["Instagram (T9)"])
 app.include_router(fans.router, prefix="/api/fans", tags=["Fan Memory"])
+app.include_router(poc.router, prefix="/api", tags=["POC"])
 
 
 @app.get("/health")
