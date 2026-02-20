@@ -12,8 +12,8 @@ interface ModelResult {
 }
 
 const PRESET_PROMPTS = {
-  portrait: "A young Asian woman in her mid-20s, sitting in a cozy coffee shop, wearing a white t-shirt and jeans, natural smile, slightly messy hair, soft window lighting, shot on iPhone 15 Pro",
-  outdoor: "A young Asian woman walking in a park during golden hour, wearing a light jacket and comfortable sneakers, candid unposed moment, warm sunlight, natural expression, shot on iPhone 15 Pro",
+  portrait: "A young Asian woman in her mid-20s, sitting at a coffee shop table, wearing a casual white t-shirt, slightly tired eyes, natural asymmetrical smile, hair a bit messy, visible skin texture, sitting off to the left side of frame, diagonal composition, soft window light creating shadows on face, shot on iPhone 15 Pro from a slight angle",
+  outdoor: "A young Asian woman walking in a park during golden hour, wearing a light jacket, candid unposed moment looking away from camera, slight frown, freckles visible, positioned in lower right third of frame, triangular composition with tree branches, warm backlight creating rim light, natural skin blemishes, shot on iPhone 15 Pro",
 }
 
 export default function ModelComparisonPage() {
@@ -59,7 +59,7 @@ export default function ModelComparisonPage() {
             🔬 模型對比 POC
           </h1>
           <p className="text-gray-600">
-            測試不同 AI 模型的生圖品質差異（優化過的 Prompt）
+            對比 flux-dev-realism vs flux-cinestill（真人感優化 Prompt + 不完美細節）
           </p>
         </div>
 
@@ -129,7 +129,7 @@ export default function ModelComparisonPage() {
 
         {/* Results Grid */}
         {results.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
             {results.map((result, idx) => (
               <div
                 key={idx}
@@ -174,7 +174,7 @@ export default function ModelComparisonPage() {
               正在生成圖片，請稍候...
               <br />
               <span className="text-sm text-gray-500">
-                (4 個模型並發執行，可能需要 1-3 分鐘)
+                (2 個模型序列執行，預計 1-2 分鐘)
               </span>
             </p>
           </div>

@@ -18,11 +18,13 @@ REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 REPLICATE_BASE = "https://api.replicate.com/v1"
 
 REALISM_SUFFIX = (
-    "candid photo, raw unedited photo, film grain, "
-    "highly detailed skin texture, visible skin pores, slight skin imperfections, "
-    "non-plastic skin, real person, not AI generated, "
-    "natural color grading, VSCO film preset, "
-    "8k, ultra sharp focus, depth of field"
+    "candid unposed photo, raw unfiltered snapshot, film grain, noise, "
+    "visible skin texture, skin pores, blemishes, freckles, minor acne scars, "
+    "slight asymmetrical face, natural uneven skin tone, tired eyes, "
+    "imperfect smile, real human proportions, not retouched, "
+    "off-center composition, rule of thirds, diagonal framing, "
+    "natural lighting with shadows, iPhone photography aesthetic, "
+    "authentic candid moment, unstaged"
 )
 
 NEGATIVE_PROMPT = (
@@ -319,7 +321,7 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
 @router.post("/model-comparison", response_model=List[ModelResult])
 async def model_comparison(req: ModelComparisonRequest):
     """
-    POC endpoint: 序列測試 4 個模型（避免 rate limit）
+    POC endpoint: 序列測試 2 個模型（避免 rate limit）
     """
     if not REPLICATE_API_TOKEN:
         raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured")
@@ -329,23 +331,13 @@ async def model_comparison(req: ModelComparisonRequest):
     # 序列執行，每個模型之間加 3 秒延遲避免 rate limit
     results = []
     
-    # 1. flux-schnell
-    logger.info("Testing flux-schnell...")
-    results.append(await test_flux_schnell(req.prompt, req.seed))
-    await asyncio.sleep(3)
-    
-    # 2. flux-dev-realism
+    # 1. flux-dev-realism
     logger.info("Testing flux-dev-realism...")
     results.append(await test_flux_realism(req.prompt, req.seed))
     await asyncio.sleep(3)
     
-    # 3. flux-cinestill
+    # 2. flux-cinestill
     logger.info("Testing flux-cinestill...")
     results.append(await test_flux_cinestill(req.prompt, req.seed))
-    await asyncio.sleep(3)
-    
-    # 4. cinestill + clarity
-    logger.info("Testing cinestill + clarity...")
-    results.append(await test_cinestill_with_clarity(req.prompt, req.seed))
     
     return results
