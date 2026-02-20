@@ -17,14 +17,14 @@ router = APIRouter(prefix="/poc", tags=["POC"])
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 REPLICATE_BASE = "https://api.replicate.com/v1"
 
-REALISM_SUFFIX = (
-    "candid unposed photo, raw unfiltered snapshot, film grain, noise, "
-    "visible skin texture, skin pores, blemishes, freckles, minor acne scars, "
-    "slight asymmetrical face, natural uneven skin tone, tired eyes, "
-    "imperfect smile, real human proportions, not retouched, "
-    "off-center composition, rule of thirds, diagonal framing, "
-    "natural lighting with shadows, iPhone photography aesthetic, "
-    "authentic candid moment, unstaged"
+REALISM_V2_SUFFIX = (
+    "shot on Sony A7R IV, 35mm f/1.8 lens, high ISO grain, accidental snapshot, "
+    "slightly underexposed, harsh shadows, realistic depth of field, subtle motion blur, "
+    "lens flare, chromatic aberration, raw dng format, unedited, flat color profile, "
+    "muted tones, film fog, haze, messy background, stray hair strands, "
+    "real-life proportions, wide-angle distortion at edges, depth of field falloff, "
+    "f/2.2, shutter speed 1/100, natural skin texture with pores and blemishes, "
+    "lens dust motes, imperfect focus"
 )
 
 NEGATIVE_PROMPT = (
@@ -70,7 +70,7 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     start_time = time.time()
     
     # 加入真人感優化 suffix
-    optimized_prompt = f"{prompt}, {REALISM_SUFFIX}"
+    optimized_prompt = f"{prompt}, {REALISM_V2_SUFFIX}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -127,11 +127,11 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
 
 
 async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
-    """測試 flux-dev-realism"""
+    """測試 flux-dev-realism (2026最新優化：降低CFG消除塑膠感)"""
     start_time = time.time()
     
-    # 加入真人感優化 suffix
-    optimized_prompt = f"{prompt}, {REALISM_SUFFIX}"
+    # 加入光學缺陷優化 suffix (V2: 從「描述臉」轉向「描述鏡頭」)
+    optimized_prompt = f"{prompt}, {REALISM_V2_SUFFIX}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -141,7 +141,7 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
         "version": "39b3434f194f87a900d1bc2b6d4b983e90f0dde1d5022c27b52c143d670758fa",
         "input": {
             "prompt": optimized_prompt,
-            "guidance": 3.5,
+            "guidance": 2.8,  # 降低至2.5-3.0消除塑膠感（原3.5太高）
             "num_outputs": 1,
             "aspect_ratio": "4:5",
             "lora_strength": 0.8,
@@ -192,7 +192,7 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
     start_time = time.time()
     
     # 加入 CNSTLL trigger word + 真人感優化 suffix
-    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_SUFFIX}"
+    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V2_SUFFIX}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -321,23 +321,18 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
 @router.post("/model-comparison", response_model=List[ModelResult])
 async def model_comparison(req: ModelComparisonRequest):
     """
-    POC endpoint: 序列測試 2 個模型（避免 rate limit）
+    POC endpoint: 測試 flux-dev-realism (2026光學缺陷優化版)
     """
     if not REPLICATE_API_TOKEN:
         raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured")
     
-    logger.info(f"Starting model comparison with prompt: {req.prompt[:50]}...")
+    logger.info(f"Starting realism test with prompt: {req.prompt[:50]}...")
     
-    # 序列執行，每個模型之間加 3 秒延遲避免 rate limit
+    # 單一模型測試
     results = []
     
-    # 1. flux-dev-realism
-    logger.info("Testing flux-dev-realism...")
+    # flux-dev-realism (CFG 2.8 + 光學缺陷優化)
+    logger.info("Testing flux-dev-realism with optical imperfections...")
     results.append(await test_flux_realism(req.prompt, req.seed))
-    await asyncio.sleep(3)
-    
-    # 2. flux-cinestill
-    logger.info("Testing flux-cinestill...")
-    results.append(await test_flux_cinestill(req.prompt, req.seed))
     
     return results
