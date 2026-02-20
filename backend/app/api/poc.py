@@ -136,16 +136,16 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
         "Content-Type": "application/json",
     }
     payload = {
-        "version": "39b3434f820f5b0927e2306682bd58745d26764f70cfb2e76c01c5ed60dfb9c5",
+        "version": "39b3434f194f87a900d1bc2b6d4b983e90f0dde1d5022c27b52c143d670758fa",
         "input": {
             "prompt": optimized_prompt,
-            "negative_prompt": NEGATIVE_PROMPT,
-            "lora_strength": 0.8,
-            "guidance_scale": 3.5,
-            "num_inference_steps": 30,
-            "seed": seed,
+            "guidance": 3.5,
+            "num_outputs": 1,
             "aspect_ratio": "4:5",
+            "lora_strength": 0.8,
             "output_format": "jpg",
+            "output_quality": 90,
+            "num_inference_steps": 30,
         }
     }
     
@@ -190,21 +190,24 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
     start_time = time.time()
     
     # 加入 CNSTLL trigger word + 真人感優化 suffix
-    cinestill_prompt = f"CNSTLL {prompt}, {REALISM_SUFFIX}"
+    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_SUFFIX}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
         "Content-Type": "application/json",
     }
     payload = {
-        "version": "216a43b9a17eb45843819acee40659e5912e84fb60f04bd6bc0f6b15cdd45a78",
+        "version": "216a43b9975de9768114644bbf8cd0cba54a923c6d0f65adceaccfc9383a938f",
         "input": {
             "prompt": cinestill_prompt,
-            "negative_prompt": NEGATIVE_PROMPT,
-            "num_inference_steps": 28,
-            "guidance_scale": 3.5,
-            "seed": seed,
+            "model": "dev",
+            "lora_scale": 0.6,
+            "num_outputs": 1,
+            "aspect_ratio": "4:5",
             "output_format": "jpg",
+            "guidance_scale": 3.5,
+            "output_quality": 90,
+            "num_inference_steps": 28,
         }
     }
     
@@ -269,15 +272,23 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
             "version": "dfad41707589d68ecdccd1dfa600d55a208f9310748e44bfe35b4a6291453d5e",
             "input": {
                 "image": base_result.image_url,
+                "prompt": "masterpiece, best quality, highres",
+                "negative_prompt": "(worst quality, low quality, normal quality:2)",
                 "creativity": 0.35,
                 "resemblance": 0.6,
                 "dynamic": 6,
                 "num_inference_steps": 18,
+                "scale_factor": 1,  # 不放大，只優化質量
             }
         }
         
         async with httpx.AsyncClient(timeout=180.0) as client:
             r = await client.post(f"{REPLICATE_BASE}/predictions", json=clarity_payload, headers=headers)
+            
+            if r.status_code == 429:
+                await asyncio.sleep(10)
+                r = await client.post(f"{REPLICATE_BASE}/predictions", json=clarity_payload, headers=headers)
+            
             r.raise_for_status()
             d = r.json()
             
