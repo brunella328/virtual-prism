@@ -12,9 +12,9 @@ interface ModelResult {
 }
 
 const PRESET_PROMPTS = {
-  portrait: "A young Asian woman in her mid-20s, caught mid-sentence with mouth slightly open, at a messy Taipei coffee shop, wearing a wrinkled white t-shirt with small coffee stain near collar, cheap oxidized silver necklace, simple ring on finger, small mole on cheek, oily forehead with uneven skin pigmentation, messy hair with stray strands stuck to face, eyes looking at menu off-camera with natural gaze, positioned awkwardly off-center, mixed lighting from flickering fluorescent overhead creating ugly yellow color cast and deep messy shadows",
-  outdoor: "A young Asian woman walking through a Taipei night market, caught mid-bite with mouth open, wearing casual jacket with fabric creases, cheap accessories visible, small mole on face, slight motion blur from shaky handheld camera, eyes looking at food stall off-camera, positioned in right third of frame, messy background slightly out of focus, mixed lighting from neon signs creating harsh color cast, stray hair covering parts of face, visible skin blemishes and forehead shine, lens smudge creating soft haze",
-  extreme: "A low-quality grainy photo of a young Asian woman caught off-guard while eating noodles, mid-chew with mouth open, wrinkled t-shirt with sauce stain, oxidized necklace, small mole visible, messy hair stuck to face, oily forehead, eyes looking down at noodles naturally, sitting in dimly lit Taipei night market stall, harsh flickering fluorescent creating ugly yellow-green cast, shaky handheld motion blur, slightly out of focus, lens smudge, purple fringing, awkwardly cropped",
+  gym: "A raw grainy mobile phone photo of a young Asian woman lying on a gym mat, exhausted after workout, drenched in sweat with glistening skin, visible beads of perspiration on forehead and collarbone, flushed red cheeks, mouth slightly open panting for air, clumped wet hair matted and sticking to sweaty forehead and neck, shot from high-angle selfie perspective with iPhone front camera, wide-angle lens distortion with face center slightly bulging, harsh overhead gym fluorescent lighting creating blown-out highlights on sweaty skin, low dynamic range, high ISO noise, messy gym equipment in background, water bottles visible, cluttered environment, unstaged accidental selfie",
+  portrait: "A young Asian woman at messy Taipei coffee shop, caught mid-sentence with mouth slightly open, glistening forehead with light perspiration, cheap oxidized silver necklace, small mole on cheek, wrinkled t-shirt with coffee stain, messy hair strands stuck to face, eyes looking at menu off-camera, shot on iPhone with wide-angle distortion, harsh overhead fluorescent creating uneven lighting, half face in shadow, cluttered cafe background visible, cups and bags on table, social media compression artifacts",
+  extreme: "A low-quality grainy iPhone selfie of young Asian woman eating noodles, mid-chew with mouth open, sauce stain on shirt, sweaty forehead glistening, matted hair stuck to face from humidity, small mole visible, eyes looking down at bowl, wide-angle front camera distortion, harsh fluorescent overhead creating blown-out highlights, crushed blacks in shadows, messy night market stall background with equipment and bottles visible, not overly blurred, bad lighting, unstaged candid moment",
 }
 
 export default function ModelComparisonPage() {
@@ -57,13 +57,13 @@ export default function ModelComparisonPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            🔬 Flux Realism POC (V5不完美光線版)
+            🔬 Flux Realism POC (V6真實人格側寫版)
           </h1>
           <p className="text-gray-600 mb-1">
-            flux-dev-realism + 不完美光線（強陰影+暗部+背景可辨識）
+            flux-dev-realism + 真實人格側寫（汗水物理+手機畸變+雜亂背景）
           </p>
           <p className="text-sm text-gray-500">
-            CFG 2.5 | Steps 28 | 強陰影+crushed blacks+背景f/2.8淺景深（不過度虛化）
+            CFG 2.5 | Steps 28 | 汗水閃爍+廣角畸變+生活垃圾感 | 從「電影劇照」→「真實側寫」
           </p>
         </div>
 
@@ -71,9 +71,19 @@ export default function ModelComparisonPage() {
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              測試場景（V5不完美光線版）
+              測試場景（V6真實人格側寫版）
             </label>
             <div className="flex gap-3 mb-4 flex-wrap">
+              <button
+                onClick={() => setPrompt(PRESET_PROMPTS.gym)}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  prompt === PRESET_PROMPTS.gym
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                💪 健身房（汗水+畸變）⭐
+              </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.portrait)}
                 className={`px-4 py-2 rounded-lg font-medium ${
@@ -82,17 +92,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                👤 咖啡廳（半臉陰影+暗部）
-              </button>
-              <button
-                onClick={() => setPrompt(PRESET_PROMPTS.outdoor)}
-                className={`px-4 py-2 rounded-lg font-medium ${
-                  prompt === PRESET_PROMPTS.outdoor
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                🌃 夜市（強陰影+背景可見）
+                ☕ 咖啡廳（雜亂背景）
               </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.extreme)}
@@ -102,7 +102,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                🍜 極限測試（暗部丟失細節）
+                🍜 極限測試（濕氣+畸變）
               </button>
             </div>
             <textarea
@@ -185,10 +185,10 @@ export default function ModelComparisonPage() {
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent"></div>
             <p className="mt-4 text-gray-600">
-              正在生成圖片（不完美光線優化中）...
+              正在生成圖片（真實人格側寫中）...
               <br />
               <span className="text-sm text-gray-500">
-                (flux-dev-realism | CFG 2.5 | Steps 28 | 強陰影+暗部+背景可見 | 預計 30-40 秒)
+                (flux-dev-realism | CFG 2.5 | Steps 28 | 汗水物理+畸變+雜亂背景 | 預計 30-40 秒)
               </span>
             </p>
           </div>

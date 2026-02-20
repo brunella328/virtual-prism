@@ -17,21 +17,23 @@ router = APIRouter(prefix="/poc", tags=["POC"])
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 REPLICATE_BASE = "https://api.replicate.com/v1"
 
-REALISM_V5_IMPERFECT_LIGHT = (
-    "low-quality grainy photo, shot on older iPhone with shaky hand-held motion blur, "
-    "high ISO noise, slightly out of focus, lens smudge, purple fringing, "
-    "harsh uneven lighting, strong shadows on one side of face, dark underexposed areas, "
-    "mixed light sources creating ugly yellow-green color cast, flickering fluorescent overhead, "
-    "blocked shadows, crushed blacks, lost detail in dark areas, "
-    "low dynamic range, awkwardly cropped, half face in shadow, "
-    "small mole on cheek, uneven skin pigmentation, minor acne scar near chin, stray hair strands stuck to face, "
-    "mouth slightly open mid-sentence, eyes looking at something off-camera with natural gaze direction, "
-    "wearing cheap oxidized silver necklace, simple ring on finger, "
-    "wrinkled t-shirt with small coffee stain near collar, fabric creases from sitting, "
-    "background slightly blurred but still recognizable, shallow depth of field f/2.8, "
-    "background details visible through soft blur, not completely out of focus, "
-    "lens distortion, chromatic aberration at edges, digital artifacts, "
-    "natural flyaways covering parts of face, accidental snapshot, candid unstaged moment"
+REALISM_V6_RAW_LIFE = (
+    "raw grainy mobile phone photo, shot on iPhone front camera with wide-angle lens distortion, "
+    "1x focal length, face center slightly bulging, edges stretched, social media compression artifacts, "
+    "high ISO noise, low dynamic range, slightly out of focus, lens smudge, "
+    "dripping sweat, glistening skin after workout, drenched in perspiration, "
+    "beads of sweat on forehead and collarbone, skin flushed and red from exercise, "
+    "visible specular highlights from sweat droplets, "
+    "clumped wet hair, sweaty matted hair sticking to neck, messy strands plastered to forehead, "
+    "harsh overhead fluorescent lighting, blown-out highlights on sweaty skin, "
+    "harsh uneven lighting, strong shadows, blocked shadows, crushed blacks, "
+    "mouth slightly open panting, eyes looking at something off-camera, "
+    "small mole on cheek, uneven skin pigmentation, minor acne scar, "
+    "wearing cheap oxidized necklace, simple ring, "
+    "wrinkled clothes with sweat stains, fabric creases, "
+    "messy cluttered background, background details visible, not overly blurred, "
+    "workout equipment in background, water bottles, towels, gym clutter, "
+    "bad gym lighting, unstaged, accidental selfie, candid moment"
 )
 
 NEGATIVE_PROMPT = (
@@ -76,8 +78,8 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     """測試 flux-schnell（現用基準）"""
     start_time = time.time()
     
-    # 加入不完美光線優化 suffix
-    optimized_prompt = f"{prompt}, {REALISM_V5_IMPERFECT_LIGHT}"
+    # 加入真實人格側寫優化 suffix
+    optimized_prompt = f"{prompt}, {REALISM_V6_RAW_LIFE}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -134,11 +136,11 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
 
 
 async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
-    """測試 flux-dev-realism (V5不完美光線：強陰影+暗部+背景可辨識)"""
+    """測試 flux-dev-realism (V6真實人格側寫：汗水+手機畸變+雜亂背景)"""
     start_time = time.time()
     
-    # 加入不完美光線 (V5: 強陰影+暗部細節丟失+背景降低虛化)
-    optimized_prompt = f"{prompt}, {REALISM_V5_IMPERFECT_LIGHT}"
+    # 加入真實人格側寫 (V6: 汗水物理+廣角畸變+生活雜亂感)
+    optimized_prompt = f"{prompt}, {REALISM_V6_RAW_LIFE}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -198,8 +200,8 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
     """測試 flux-cinestill"""
     start_time = time.time()
     
-    # 加入 CNSTLL trigger word + 不完美光線
-    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V5_IMPERFECT_LIGHT}"
+    # 加入 CNSTLL trigger word + 真實人格側寫
+    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V6_RAW_LIFE}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
