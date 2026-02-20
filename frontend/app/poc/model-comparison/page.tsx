@@ -12,8 +12,8 @@ interface ModelResult {
 }
 
 const PRESET_PROMPTS = {
-  portrait: "A young Asian woman in her mid-20s, casual style, sitting in a cozy coffee shop, wearing a white t-shirt and jeans, natural smile, shot on iPhone 15 Pro",
-  outdoor: "A young Asian woman walking in a park during golden hour, wearing a light jacket and comfortable sneakers, candid moment, warm sunlight, shot on iPhone 15 Pro",
+  portrait: "A young Asian woman in her mid-20s, sitting in a cozy coffee shop, wearing a white t-shirt and jeans, natural smile, slightly messy hair, soft window lighting, shot on iPhone 15 Pro",
+  outdoor: "A young Asian woman walking in a park during golden hour, wearing a light jacket and comfortable sneakers, candid unposed moment, warm sunlight, natural expression, shot on iPhone 15 Pro",
 }
 
 export default function ModelComparisonPage() {

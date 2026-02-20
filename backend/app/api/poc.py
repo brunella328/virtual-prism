@@ -17,6 +17,14 @@ router = APIRouter(prefix="/poc", tags=["POC"])
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 REPLICATE_BASE = "https://api.replicate.com/v1"
 
+REALISM_SUFFIX = (
+    "candid photo, raw unedited photo, film grain, "
+    "highly detailed skin texture, visible skin pores, slight skin imperfections, "
+    "non-plastic skin, real person, not AI generated, "
+    "natural color grading, VSCO film preset, "
+    "8k, ultra sharp focus, depth of field"
+)
+
 NEGATIVE_PROMPT = (
     "plastic skin, oversmoothed, airbrushed, CGI, anime, illustration, "
     "cartoon, painting, render, 3d, artificial, fake, doll-like, "
@@ -59,6 +67,9 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     """測試 flux-schnell（現用基準）"""
     start_time = time.time()
     
+    # 加入真人感優化 suffix
+    optimized_prompt = f"{prompt}, {REALISM_SUFFIX}"
+    
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
         "Content-Type": "application/json",
@@ -66,7 +77,7 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     }
     payload = {
         "input": {
-            "prompt": prompt,
+            "prompt": optimized_prompt,
             "num_outputs": 1,
             "aspect_ratio": "4:5",
             "output_format": "jpg",
@@ -117,6 +128,9 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
     """測試 flux-dev-realism"""
     start_time = time.time()
     
+    # 加入真人感優化 suffix
+    optimized_prompt = f"{prompt}, {REALISM_SUFFIX}"
+    
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
         "Content-Type": "application/json",
@@ -124,7 +138,8 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
     payload = {
         "version": "39b3434f820f5b0927e2306682bd58745d26764f70cfb2e76c01c5ed60dfb9c5",
         "input": {
-            "prompt": prompt,
+            "prompt": optimized_prompt,
+            "negative_prompt": NEGATIVE_PROMPT,
             "lora_strength": 0.8,
             "guidance_scale": 3.5,
             "num_inference_steps": 30,
@@ -174,8 +189,8 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
     """測試 flux-cinestill"""
     start_time = time.time()
     
-    # 加入 CNSTLL trigger word
-    cinestill_prompt = f"CNSTLL {prompt}"
+    # 加入 CNSTLL trigger word + 真人感優化 suffix
+    cinestill_prompt = f"CNSTLL {prompt}, {REALISM_SUFFIX}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -185,6 +200,7 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
         "version": "216a43b9a17eb45843819acee40659e5912e84fb60f04bd6bc0f6b15cdd45a78",
         "input": {
             "prompt": cinestill_prompt,
+            "negative_prompt": NEGATIVE_PROMPT,
             "num_inference_steps": 28,
             "guidance_scale": 3.5,
             "seed": seed,
