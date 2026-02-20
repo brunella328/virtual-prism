@@ -62,6 +62,7 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
         "Content-Type": "application/json",
+        "Prefer": "wait",
     }
     payload = {
         "input": {
@@ -70,15 +71,20 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
             "aspect_ratio": "4:5",
             "output_format": "jpg",
             "output_quality": 90,
-            "seed": seed % (2**32),
+            "seed": seed,
             "go_fast": True,
         }
     }
     
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=180.0) as client:
             url = f"{REPLICATE_BASE}/models/black-forest-labs/flux-schnell/predictions"
             r = await client.post(url, json=payload, headers=headers)
+            
+            if r.status_code == 429:
+                await asyncio.sleep(10)  # 等待 10 秒後重試
+                r = await client.post(url, json=payload, headers=headers)
+            
             r.raise_for_status()
             d = r.json()
             
@@ -119,19 +125,23 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
         "version": "39b3434f820f5b0927e2306682bd58745d26764f70cfb2e76c01c5ed60dfb9c5",
         "input": {
             "prompt": prompt,
-            "negative_prompt": NEGATIVE_PROMPT,
             "lora_strength": 0.8,
             "guidance_scale": 3.5,
             "num_inference_steps": 30,
-            "seed": seed % (2**32),
-            "width": 832,
-            "height": 1040,
+            "seed": seed,
+            "aspect_ratio": "4:5",
+            "output_format": "jpg",
         }
     }
     
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
             r = await client.post(f"{REPLICATE_BASE}/predictions", json=payload, headers=headers)
+            
+            if r.status_code == 429:
+                await asyncio.sleep(10)
+                r = await client.post(f"{REPLICATE_BASE}/predictions", json=payload, headers=headers)
+            
             r.raise_for_status()
             d = r.json()
             
@@ -175,18 +185,21 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
         "version": "216a43b9a17eb45843819acee40659e5912e84fb60f04bd6bc0f6b15cdd45a78",
         "input": {
             "prompt": cinestill_prompt,
-            "negative_prompt": NEGATIVE_PROMPT,
             "num_inference_steps": 28,
             "guidance_scale": 3.5,
-            "seed": seed % (2**32),
-            "width": 832,
-            "height": 1040,
+            "seed": seed,
+            "output_format": "jpg",
         }
     }
     
     try:
         async with httpx.AsyncClient(timeout=180.0) as client:
             r = await client.post(f"{REPLICATE_BASE}/predictions", json=payload, headers=headers)
+            
+            if r.status_code == 429:
+                await asyncio.sleep(10)
+                r = await client.post(f"{REPLICATE_BASE}/predictions", json=payload, headers=headers)
+            
             r.raise_for_status()
             d = r.json()
             
@@ -279,35 +292,33 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
 @router.post("/model-comparison", response_model=List[ModelResult])
 async def model_comparison(req: ModelComparisonRequest):
     """
-    POC endpoint: 同時測試 4 個模型
+    POC endpoint: 序列測試 4 個模型（避免 rate limit）
     """
     if not REPLICATE_API_TOKEN:
         raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured")
     
     logger.info(f"Starting model comparison with prompt: {req.prompt[:50]}...")
     
-    # 並發執行所有測試
-    results = await asyncio.gather(
-        test_flux_schnell(req.prompt, req.seed),
-        test_flux_realism(req.prompt, req.seed),
-        test_flux_cinestill(req.prompt, req.seed),
-        test_cinestill_with_clarity(req.prompt, req.seed),
-        return_exceptions=True
-    )
+    # 序列執行，每個模型之間加 3 秒延遲避免 rate limit
+    results = []
     
-    # 處理 exceptions
-    final_results = []
-    for i, r in enumerate(results):
-        if isinstance(r, Exception):
-            model_names = ["flux-schnell", "flux-dev-realism", "flux-cinestill", "cinestill + clarity"]
-            final_results.append(ModelResult(
-                model_name=model_names[i],
-                image_url="",
-                generation_time=0,
-                cost_estimate=0,
-                error=str(r)
-            ))
-        else:
-            final_results.append(r)
+    # 1. flux-schnell
+    logger.info("Testing flux-schnell...")
+    results.append(await test_flux_schnell(req.prompt, req.seed))
+    await asyncio.sleep(3)
     
-    return final_results
+    # 2. flux-dev-realism
+    logger.info("Testing flux-dev-realism...")
+    results.append(await test_flux_realism(req.prompt, req.seed))
+    await asyncio.sleep(3)
+    
+    # 3. flux-cinestill
+    logger.info("Testing flux-cinestill...")
+    results.append(await test_flux_cinestill(req.prompt, req.seed))
+    await asyncio.sleep(3)
+    
+    # 4. cinestill + clarity
+    logger.info("Testing cinestill + clarity...")
+    results.append(await test_cinestill_with_clarity(req.prompt, req.seed))
+    
+    return results
