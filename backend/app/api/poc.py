@@ -17,14 +17,17 @@ router = APIRouter(prefix="/poc", tags=["POC"])
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 REPLICATE_BASE = "https://api.replicate.com/v1"
 
-REALISM_V2_SUFFIX = (
-    "shot on Sony A7R IV, 35mm f/1.8 lens, high ISO grain, accidental snapshot, "
-    "slightly underexposed, harsh shadows, realistic depth of field, subtle motion blur, "
-    "lens flare, chromatic aberration, raw dng format, unedited, flat color profile, "
-    "muted tones, film fog, haze, messy background, stray hair strands, "
-    "real-life proportions, wide-angle distortion at edges, depth of field falloff, "
-    "f/2.2, shutter speed 1/100, natural skin texture with pores and blemishes, "
-    "lens dust motes, imperfect focus"
+REALISM_V3_DESTRUCTIVE = (
+    "low-quality grainy photo, shot on older iPhone with shaky hand-held motion blur, "
+    "high ISO noise, slightly out of focus, lens smudge, purple fringing, "
+    "mixed lighting with ugly yellow-green color cast, flickering fluorescent overhead, "
+    "low dynamic range, awkwardly cropped, messy shadows, "
+    "uneven skin pigmentation, small pimple near chin, stray hair strands stuck to face, "
+    "mouth slightly open mid-sentence, eyes with micro-saccades, unfocused gaze, "
+    "background with optical noise, messy bokeh with hard edges, lens distortion, "
+    "chromatic aberration at edges, digital artifacts, underexposed shadows, "
+    "blown-out highlights, natural flyaways covering parts of face, "
+    "accidental snapshot, candid unstaged moment"
 )
 
 NEGATIVE_PROMPT = (
@@ -69,8 +72,8 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     """測試 flux-schnell（現用基準）"""
     start_time = time.time()
     
-    # 加入真人感優化 suffix
-    optimized_prompt = f"{prompt}, {REALISM_V2_SUFFIX}"
+    # 加入破壞性指令優化 suffix
+    optimized_prompt = f"{prompt}, {REALISM_V3_DESTRUCTIVE}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -127,11 +130,11 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
 
 
 async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
-    """測試 flux-dev-realism (2026最新優化：降低CFG消除塑膠感)"""
+    """測試 flux-dev-realism (V3破壞性指令：低畫質+色偏+失焦)"""
     start_time = time.time()
     
-    # 加入光學缺陷優化 suffix (V2: 從「描述臉」轉向「描述鏡頭」)
-    optimized_prompt = f"{prompt}, {REALISM_V2_SUFFIX}"
+    # 加入破壞性指令 (V3: 嘴巴微張+鏡頭汙漬+混合光源色偏)
+    optimized_prompt = f"{prompt}, {REALISM_V3_DESTRUCTIVE}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -141,13 +144,13 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
         "version": "39b3434f194f87a900d1bc2b6d4b983e90f0dde1d5022c27b52c143d670758fa",
         "input": {
             "prompt": optimized_prompt,
-            "guidance": 2.8,  # 降低至2.5-3.0消除塑膠感（原3.5太高）
+            "guidance": 2.5,  # 降至2.0-2.8讓AI「不那麼聽話」，產生更多隨機瑕疵
             "num_outputs": 1,
             "aspect_ratio": "4:5",
             "lora_strength": 0.8,
             "output_format": "jpg",
             "output_quality": 90,
-            "num_inference_steps": 30,
+            "num_inference_steps": 28,  # 降至25-30避免過度銳化
         }
     }
     
@@ -191,8 +194,8 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
     """測試 flux-cinestill"""
     start_time = time.time()
     
-    # 加入 CNSTLL trigger word + 真人感優化 suffix
-    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V2_SUFFIX}"
+    # 加入 CNSTLL trigger word + 破壞性指令
+    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V3_DESTRUCTIVE}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",

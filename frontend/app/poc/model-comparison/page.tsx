@@ -12,9 +12,9 @@ interface ModelResult {
 }
 
 const PRESET_PROMPTS = {
-  portrait: "A young Asian woman in her mid-20s, caught off-guard mid-conversation at a Taipei coffee shop, wearing a slightly wrinkled white t-shirt, oily forehead from humidity, messy hair with flyaways, positioned off-center in lower left third of frame, harsh overhead fluorescent lighting casting unflattering shadows under eyes and nose, side lighting from window leaving half her face darker, diagonal composition, accidental snapshot",
-  outdoor: "A young Asian woman walking through a Taipei night market, wearing a casual jacket, caught mid-bite eating street food, slight motion blur from movement, positioned in right third of frame with messy background, backlit by neon signs creating lens flare, strong shadows from top lighting, natural tired expression, visible skin texture and forehead shine, triangular composition with food stalls, chromatic aberration at edges",
-  extreme: "A candid photo of a young Asian woman caught off-guard while eating noodles, mid-chew, messy hair, oily skin forehead, sitting in a dimly lit Taipei night market stall, harsh fluorescent light from above casting long shadows",
+  portrait: "A young Asian woman in her mid-20s, caught mid-sentence with mouth slightly open, at a messy Taipei coffee shop, wearing a wrinkled white t-shirt, oily forehead with uneven skin pigmentation, a small pimple near chin, messy hair with stray strands stuck to her face, positioned awkwardly off-center, mixed lighting from flickering fluorescent overhead and warm orange lamp creating ugly yellow color cast and deep messy shadows, eyes with unfocused gaze",
+  outdoor: "A young Asian woman walking through a Taipei night market, caught mid-bite with mouth open, slight motion blur from shaky handheld camera, positioned in right third of frame, messy background slightly out of focus, mixed lighting from neon signs and street lamps creating harsh color cast, stray hair covering parts of face, visible skin blemishes and forehead shine, chromatic aberration at frame edges, lens smudge creating soft haze",
+  extreme: "A low-quality grainy photo of a young Asian woman caught off-guard while eating noodles, mid-chew with mouth open, messy hair stuck to face, oily forehead with small pimples, sitting in dimly lit Taipei night market stall, harsh flickering fluorescent overhead creating ugly yellow-green cast, shaky handheld motion blur, slightly out of focus, lens smudge, purple fringing, awkwardly cropped",
 }
 
 export default function ModelComparisonPage() {
@@ -57,13 +57,13 @@ export default function ModelComparisonPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            🔬 Flux Realism POC (2026光學缺陷優化版)
+            🔬 Flux Realism POC (V3破壞性指令版)
           </h1>
           <p className="text-gray-600 mb-1">
-            flux-dev-realism + 光學物理瑕疵（色散/動態模糊/鏡頭炫光/非對稱光影）
+            flux-dev-realism + 破壞性指令（嘴微張/鏡頭汙漬/混合光源色偏/失焦）
           </p>
           <p className="text-sm text-gray-500">
-            CFG 2.8 | 從「描述臉」→「描述鏡頭」| 破除塑膠感
+            CFG 2.5 | Steps 28 | 低畫質+色偏 破除AI完美算力
           </p>
         </div>
 
@@ -71,7 +71,7 @@ export default function ModelComparisonPage() {
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              測試場景（2026光學缺陷優化版）
+              測試場景（V3破壞性指令版）
             </label>
             <div className="flex gap-3 mb-4 flex-wrap">
               <button
@@ -82,7 +82,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                👤 咖啡廳（側光+頂光）
+                👤 咖啡廳（嘴微張+色偏）
               </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.outdoor)}
@@ -92,7 +92,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                🌃 夜市（逆光+動態模糊）
+                🌃 夜市（失焦+鏡頭汙漬）
               </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.extreme)}
@@ -102,7 +102,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                🍜 極限測試（吃麵中）
+                🍜 極限測試（低畫質顆粒）
               </button>
             </div>
             <textarea
@@ -185,10 +185,10 @@ export default function ModelComparisonPage() {
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent"></div>
             <p className="mt-4 text-gray-600">
-              正在生成圖片（光學缺陷優化中）...
+              正在生成圖片（破壞性指令執行中）...
               <br />
               <span className="text-sm text-gray-500">
-                (flux-dev-realism | CFG 2.8 | 預計 30-40 秒)
+                (flux-dev-realism | CFG 2.5 | Steps 28 | 預計 30-40 秒)
               </span>
             </p>
           </div>
