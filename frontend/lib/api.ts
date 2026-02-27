@@ -118,6 +118,24 @@ export async function disconnectInstagram(personaId: string): Promise<{ disconne
   return apiDelete(`/api/instagram/token/${encodeURIComponent(personaId)}`)
 }
 
+/**
+ * Connect Instagram account using a direct access token (bypass OAuth).
+ * Useful for manual token entry or advanced users with long-lived tokens.
+ */
+export async function connectWithToken(
+  personaId: string,
+  accessToken: string,
+  igUserId?: string,
+  igUsername?: string,
+): Promise<{ success: boolean; persona_id: string; ig_account_id: string; ig_username: string }> {
+  return apiPost('/api/instagram/connect-token', {
+    persona_id: personaId,
+    access_token: accessToken,
+    ig_user_id: igUserId,
+    ig_username: igUsername,
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Interact / Auto-Reply Types
 // ---------------------------------------------------------------------------

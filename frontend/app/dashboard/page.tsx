@@ -2,173 +2,234 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import WeekCalendar from '@/components/life-stream/WeekCalendar'
+import Navbar from '@/components/Navbar'
+import ToastContainer from '@/components/Toast'
+import { useToast } from '@/hooks/useToast'
+import { getInstagramStatus, publishNow, scheduleInstagramPosts } from '@/lib/api'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+const GENERATION_STEPS = [
+  { key: 'planning', label: '規劃內容中...' },
+  { key: 'generating_1', label: '生成圖片 1/3...' },
+  { key: 'generating_2', label: '生成圖片 2/3...' },
+  { key: 'generating_3', label: '生成圖片 3/3...' },
+  { key: 'saving', label: '儲存排程中...' },
+]
+
 export default function DashboardPage() {
   const router = useRouter()
+  const { toasts, addToast, removeToast } = useToast()
   const [schedule, setSchedule] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [error, setError] = useState('')
+  const [generationStep, setGenerationStep] = useState('')
+  const [igConnected, setIgConnected] = useState(false)
+  const [pendingRegen, setPendingRegen] = useState<{ day: number; image_url: string; image_prompt: string } | null>(null)
 
-  // A6: 登入守衛
+  // Auth guard
   useEffect(() => {
     const userId = localStorage.getItem('vp_user_id')
-    if (!userId) {
-      router.replace('/')
-    }
+    if (!userId) { router.replace('/onboarding'); return }
+
+    // Load IG status
+    getInstagramStatus(userId)
+      .then(s => setIgConnected(!!s.connected))
+      .catch(() => setIgConnected(false))
   }, [router])
 
+  // Load schedule on mount
   useEffect(() => {
-    // 優先從 localStorage 讀取已存在的排程，避免每次進頁面都重新生成
-    const cached = localStorage.getItem('vp_schedule')
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSchedule(parsed)
+    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id')
+    if (!personaId) { generateSchedule(); return }
+
+    fetch(`${API}/api/life-stream/schedule/${personaId}`)
+      .then(r => r.json())
+      .then(data => {
+        const posts = data.posts || []
+        if (posts.length > 0) {
+          setSchedule(posts)
+          localStorage.setItem('vp_schedule', JSON.stringify(posts))
           setLoading(false)
-          return
+        } else {
+          generateSchedule()
         }
-      } catch {}
-    }
-    generateSchedule()
+      })
+      .catch(() => {
+        const cached = localStorage.getItem('vp_schedule')
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSchedule(parsed)
+              setLoading(false)
+              return
+            }
+          } catch {}
+        }
+        generateSchedule()
+      })
   }, [])
 
   const generateSchedule = async () => {
     const personaId = localStorage.getItem('vp_persona_id')
     const personaRaw = localStorage.getItem('vp_persona')
     const appearancePrompt = localStorage.getItem('vp_appearance_prompt') || ''
-
     if (!personaId || !personaRaw) {
-      setError('找不到人設資料，請先完成 Onboarding')
+      addToast('找不到人設資料，請先完成 Onboarding', 'error')
       setLoading(false)
       return
     }
 
-    setGenerating(true)
     setLoading(true)
-    setError('')
+    setGenerationStep('planning')
+
+    // 模擬分段進度（每步約 12 秒）
+    const stepKeys = GENERATION_STEPS.map(s => s.key)
+    let stepIdx = 0
+    const timer = setInterval(() => {
+      stepIdx++
+      if (stepIdx < stepKeys.length) setGenerationStep(stepKeys[stepIdx])
+      else clearInterval(timer)
+    }, 12000)
 
     try {
       const persona = JSON.parse(personaRaw)
-      // InstantID 需要公開 URL，data URL 太大不適合傳 JSON，暫時跳過
-      // TODO: 上傳到 CDN 後再啟用 InstantID
       const res = await fetch(`${API}/api/life-stream/generate-schedule/${personaId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          persona,
-          appearance_prompt: appearancePrompt,
-          face_image_url: '',
-        }),
+        body: JSON.stringify({ persona, appearance_prompt: appearancePrompt, face_image_url: '' }),
       })
-      if (!res.ok) throw new Error(`API ${res.status}`)
+      clearInterval(timer)
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.detail || `HTTP ${res.status}`)
+      }
       const data = await res.json()
-      const schedule = data.schedule || data
-      setSchedule(schedule)
-      // Cache 排程，讓 Publish → 回來時不重新生成
-      localStorage.setItem('vp_schedule', JSON.stringify(schedule))
+      const newSchedule = data.schedule || data
+      setSchedule(newSchedule)
+      localStorage.setItem('vp_schedule', JSON.stringify(newSchedule))
+      addToast('排程生成完成 ✓', 'success')
     } catch (e) {
-      setError(`生成失敗：${e instanceof Error ? e.message : String(e)}`)
+      clearInterval(timer)
+      addToast(`生成失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     } finally {
       setLoading(false)
-      setGenerating(false)
+      setGenerationStep('')
     }
   }
 
-  const handleApprove = (day: number) => {
-    setSchedule(prev => {
-      const updated = prev.map(item =>
-        item.day === day ? { ...item, status: item.status === 'approved' ? 'draft' : 'approved' } : item
-      )
-      localStorage.setItem('vp_schedule', JSON.stringify(updated))
-      return updated
-    })
-  }
-  const handleReject = (day: number) => {
-    setSchedule(prev => {
-      const updated = prev.map(item =>
-        item.day === day ? { ...item, status: 'rejected' } : item
-      )
-      localStorage.setItem('vp_schedule', JSON.stringify(updated))
-      return updated
-    })
-  }
   const handleRegenerate = async (day: number, instruction?: string) => {
     const item = schedule.find(s => s.day === day)
     if (!item) return
+    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id') || ''
     setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'regenerating' } : s))
     try {
       const res = await fetch(`${API}/api/life-stream/regenerate/${day}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ original_prompt: item.image_prompt, instruction }),
+        body: JSON.stringify({
+          scene_prompt: item.scene_prompt || item.image_prompt,
+          instruction: instruction || '',
+          persona_id: personaId,
+        }),
       })
-      if (res.ok) {
-        const updated = await res.json()
-        setSchedule(prev => prev.map(s => s.day === day ? { ...s, ...updated, status: 'draft' } : s))
-      }
-    } catch {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const result = await res.json()
+      // 不直接覆蓋，先暫存等待用戶確認
       setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
+      setPendingRegen({ day, image_url: result.image_url, image_prompt: result.image_prompt })
+      addToast('重繪完成，請確認是否套用', 'info')
+    } catch (e) {
+      setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
+      addToast(`重繪失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
   }
 
-  const approvedCount = schedule.filter(d => d.status === 'approved').length
+  const handleApplyRegen = () => {
+    if (!pendingRegen) return
+    setSchedule(prev => {
+      const updated = prev.map(s => s.day === pendingRegen.day
+        ? { ...s, image_url: pendingRegen.image_url, image_prompt: pendingRegen.image_prompt }
+        : s)
+      localStorage.setItem('vp_schedule', JSON.stringify(updated))
+      return updated
+    })
+    setPendingRegen(null)
+    addToast('已套用新圖片 ✓', 'success')
+  }
 
-  if (error) return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8">
-      <p className="text-red-500 mb-4">{error}</p>
-      <button onClick={() => router.push('/onboarding')} className="bg-black text-white px-6 py-2 rounded-lg">
-        回到 Onboarding
-      </button>
-    </main>
-  )
+  const handlePublishNow = async (day: number) => {
+    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id')
+    const item = schedule.find(s => s.day === day)
+    if (!personaId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
+    try {
+      const result = await publishNow(personaId, item.image_url, item.caption)
+      addToast(`發布成功 ✓ Media ID: ${result.media_id}`, 'success')
+      setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'published' } : s))
+    } catch (e) {
+      addToast(`發布失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
+  }
 
-  if (loading) return (
-    <main className="min-h-screen flex flex-col items-center justify-center">
-      <div className="text-5xl mb-4 animate-spin">🌈</div>
-      <h2 className="text-xl font-semibold">{generating ? 'AI 生成 7 天內容 + 圖片中...' : '載入中...'}</h2>
-      <p className="text-gray-400 mt-2 text-sm">生圖約需 20-40 秒，請稍候</p>
-    </main>
-  )
+  const handleSchedulePost = async (day: number, publishAt: string) => {
+    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id')
+    const item = schedule.find(s => s.day === day)
+    if (!personaId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
+    try {
+      await scheduleInstagramPosts(personaId, [{
+        image_url: item.image_url,
+        caption: item.caption,
+        publish_at: new Date(publishAt).toISOString(),
+      }])
+      addToast(`已排程 ✓ ${new Date(publishAt).toLocaleString('zh-TW')}`, 'success')
+      setSchedule(prev => prev.map(s => s.day === day ? { ...s, scheduledAt: publishAt } : s))
+    } catch (e) {
+      addToast(`排程失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
+  }
+
+  const currentStep = GENERATION_STEPS.find(s => s.key === generationStep)
 
   return (
-    <main className="min-h-screen p-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">內容審核後台</h1>
-          <p className="text-gray-500 text-sm mt-1">本週排程 · {approvedCount}/7 已核准</p>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={() => {
-            localStorage.removeItem('vp_schedule')
-            generateSchedule()
-          }} disabled={generating}
-            className="border px-4 py-2 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50">
-            {generating ? '生成中...' : '重新生成'}
-          </button>
-          {approvedCount > 0 && (
-            <button
-              onClick={() => {
-                const approved = schedule.filter(s => s.status === 'approved')
-                localStorage.setItem('vp_approved_posts', JSON.stringify(approved))
-                window.location.href = '/publish'
-              }}
-              className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800">
-              排程發布 {approvedCount} 則 →
-            </button>
-          )}
-        </div>
-      </div>
+    <>
+      <Navbar />
+      <main className="min-h-screen p-6 max-w-4xl mx-auto">
+        {loading ? (
+          <div className="min-h-[60vh] flex flex-col items-center justify-center">
+            <div className="text-5xl mb-4 animate-spin">🌈</div>
+            <h2 className="text-xl font-semibold">{currentStep?.label || '載入中...'}</h2>
+            <p className="text-gray-400 mt-2 text-sm">生圖約需 30-60 秒，請稍候</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h1 className="text-2xl font-bold">內容審核</h1>
+                <p className="text-gray-500 text-sm mt-1">3 天排程</p>
+              </div>
+              <button
+                onClick={() => { localStorage.removeItem('vp_schedule'); generateSchedule() }}
+                disabled={!!generationStep}
+                className="border px-4 py-2 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                {generationStep ? '生成中...' : '重新生成'}
+              </button>
+            </div>
 
-      <WeekCalendar
-        schedule={schedule}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        onRegenerate={handleRegenerate}
-      />
-    </main>
+            <WeekCalendar
+              schedule={schedule}
+              onRegenerate={handleRegenerate}
+              onPublishNow={handlePublishNow}
+              onSchedule={handleSchedulePost}
+              igConnected={igConnected}
+              pendingRegen={pendingRegen}
+              onApplyRegen={handleApplyRegen}
+              onDiscardRegen={() => setPendingRegen(null)}
+            />
+          </>
+        )}
+      </main>
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
+    </>
   )
 }

@@ -14,28 +14,52 @@ load_dotenv()
 client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 SCHEDULE_PROMPT = """你是一個 AI 網紅內容規劃師。
-根據以下人設 JSON，為這個 AI 網紅規劃未來 7 天的 Instagram 圖文內容。
+根據以下人設 JSON，為這個 AI 網紅規劃未來 3 天的 Instagram 圖文內容。
 
-輸出必須是嚴格的 JSON 陣列（無多餘文字），每天一個物件：
+**重要：必須用繁體中文，且只輸出 JSON 陣列，不要任何前綴說明或註解！**
+
+輸出格式（嚴格的 JSON 陣列，共 3 天）：
 [
   {
     "day": 1,
     "scene": "場景描述（中文，25字以內）",
     "caption": "Instagram 文案（中文，含 1-2 個 emoji，80字以內）",
-    "scene_prompt": "純場景描述（英文，只描述場景/環境/光線/氣氛，不含人物，30字以內）",
+    "scene_prompt": "詳細場景描述（英文，60-100字）：包含場景環境、光線、動作、表情、**真實手機照片的物理缺陷**（如：汗水閃爍、皮膚油光、衣服污漬與皺褶、頭髮黏臉、嘴微張、眼神看向畫面外、手機畸變、雜亂背景、harsh lighting、blown-out highlights、crushed shadows）。營造「偷拍感」與「未修圖的真實瞬間」。不要描述人物基本外觀（臉型、髮色等由系統統一注入），但要描述當下的狀態細節",
     "hashtags": ["#tag1", "#tag2", "#tag3"]
   }
 ]
-確保 7 天場景多樣化（室內/室外、日間/夜間交替），符合人設生活風格。
-重要：scene_prompt 只描述場景環境，不要描述人物外觀（人物描述由系統統一注入）。"""
 
-async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_prompt: str = "", face_image_url: str = "") -> dict:
-    """T6: 根據人設生成 7 天圖文排程（含生圖）"""
+scene_prompt 範例（V7 真實感版本，參考用）：
+- 健身房："lying on gym mat after intense workout, exhausted expression with mouth slightly open panting, drenched in sweat with glistening forehead and collarbone, beads of perspiration visible, flushed red cheeks, clumped wet hair sticking to sweaty face and neck, eyes looking at water bottle off-camera, harsh overhead gym fluorescent creating blown-out highlights on sweaty skin, crushed shadows under equipment, messy gym clutter in background with towels and bottles, unstaged candid moment"
+- 咖啡廳："at messy Taipei coffee shop, caught mid-sentence with mouth slightly open, glistening forehead with light perspiration, small mole on cheek, wrinkled t-shirt with visible coffee stain near collar, messy hair strands stuck to face, eyes looking at menu off-camera with natural gaze, cheap oxidized silver necklace visible, harsh overhead fluorescent creating half face in shadow, crushed blacks in dark areas, cluttered cafe background with cups and bags on table, social media compression artifacts feel"
+- 夜市："eating noodles mid-chew with mouth open showing food, visible sauce stain on shirt collar, sweaty forehead glistening under harsh night market fluorescent, matted hair stuck to face from humidity, small mole visible on cheek, eyes looking down at bowl naturally, harsh overhead lighting creating blown-out highlights and crushed shadows, messy food stall background with equipment and condiment bottles visible through soft blur, unstaged candid eating moment"
+
+確保 3 天場景多樣化（室內/室外、日間/夜間交替），符合人設生活風格。每個 scene_prompt 必須包含：
+1. **真實瑕疵**：汗水、油光、污漬、皺褶、痣、不對稱
+2. **動態瞬間**：嘴微張、眼神看向畫面外、mid-action
+3. **光線缺陷**：harsh lighting、blown-out highlights、crushed shadows
+4. **背景雜亂**：clutter、equipment、bottles、messy environment
+5. **手機感**：candid、unstaged、social media compression feel"""
+
+async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_prompt: str = "") -> dict:
+    """T6: 根據人設生成 3 天圖文排程（含生圖）
     
+    人臉參考圖自動從存儲的 persona 讀取，不再需要前端傳入。
+    降低為 3 天以減少 API 呼叫次數，避免 rate limit。
+    """
+    from app.services.persona_storage import load_persona
+    
+    # 從存儲讀取 persona，取得 reference_face_url
+    persona_data = load_persona(persona_id)
+    if not persona_data:
+        raise ValueError(f"Persona {persona_id} 不存在。請先完成 Onboarding 創建人設。")
+    
+    # 使用 Cloudinary 上的參考臉照（#71 完成後啟用）
+    face_image_url = persona_data.reference_face_url or ""
     base_prompt = appearance_prompt or "attractive person, high quality, realistic"
     start_date = datetime.now()
 
-    # Step 1: LLM 規劃 7 天內容
+    # Step 1: LLM 規劃 3 天內容
     message = await client.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=2048,
@@ -46,10 +70,35 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
         system=SCHEDULE_PROMPT
     )
     
-    schedule_raw = message.content[0].text
-    schedule = json.loads(schedule_raw)
+    schedule_raw = message.content[0].text.strip()
+    
+    # 提取 JSON（處理多種情況：markdown代碼塊、前綴文字等）
+    if schedule_raw.startswith("```"):
+        # 移除 ```json 和 ``` 標記
+        schedule_raw = schedule_raw.split("```")[1]
+        if schedule_raw.startswith("json"):
+            schedule_raw = schedule_raw[4:].strip()
+    
+    # 找到第一個 [ 的位置（JSON 陣列起點）
+    json_start = schedule_raw.find("[")
+    if json_start > 0:
+        schedule_raw = schedule_raw[json_start:]
+    elif json_start == -1:
+        logger.error(f"No JSON array found in Claude response: {schedule_raw[:500]}")
+        raise ValueError("Claude 返回的內容中找不到 JSON 陣列，請重試。")
+    
+    # 解析 JSON
+    try:
+        schedule = json.loads(schedule_raw)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse schedule JSON. Raw response: {schedule_raw[:500]}")
+        raise ValueError(
+            f"❌ Claude 返回的排程格式錯誤（無法解析 JSON）。\n"
+            f"錯誤位置：{e.msg} at line {e.lineno} column {e.colno}\n"
+            f"請重試，或檢查 Claude 是否返回了說明文字而非純 JSON。"
+        ) from e
 
-    # Step 2: 為每天加入日期 + 呼叫生圖（並行）
+    # Step 2: 為每天加入日期 + 呼叫生圖（並行，3天）
     # 推斷攝影風格（依場景關鍵字）
     SCENE_CAMERA_MAP = {
         "night": "night", "neon": "night", "bar": "night", "club": "night",
@@ -78,13 +127,26 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
         )
 
         try:
-            image_url = await comfyui_service.generate_image(
+            replicate_url = await comfyui_service.generate_image(
                 prompt=full_prompt,
                 seed=item.get("seed", 42),
                 face_image_url=face_image_url,
                 camera_style=camera_style,
             )
             seed_val = item.get("seed", 42)
+            # 轉存 Cloudinary，避免 Replicate URL ~1h 失效
+            if replicate_url:
+                try:
+                    from app.services.cloudinary_service import upload_from_url
+                    image_url = await upload_from_url(
+                        replicate_url,
+                        folder=f"virtual_prism/{persona_id}"
+                    )
+                except Exception as cdn_err:
+                    logger.warning(f"Cloudinary upload failed, using Replicate URL: {cdn_err}")
+                    image_url = replicate_url
+            else:
+                image_url = None
         except Exception as e:
             logger.error(f"Image generation failed for day {item.get('day')}: {e}")
             image_url = None
@@ -99,13 +161,22 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
             "status": "draft"
         }
 
-    # 循序生成 7 天圖片（避免 Replicate 限速）
+    # 循序生成 3 天圖片（避免 Replicate 限速）
     days = []
     for i, item in enumerate(schedule):
         if i > 0:
-            await asyncio.sleep(2)  # 間隔 2 秒避免 429
+            # 增加間隔到 10 秒，避免 429 Too Many Requests
+            logger.info(f"⏳ Waiting 10 seconds before generating day {i+1}/3...")
+            await asyncio.sleep(10)
+        
+        logger.info(f"🎨 Generating image for day {i+1}/3...")
         day_result = await generate_day(item, i)
         days.append(day_result)
+
+    # 生圖完成後持久化排程
+    from app.services.schedule_storage import save_schedule
+    save_schedule(persona_id, days)
+    logger.info(f"Schedule saved for persona_id={persona_id} ({len(days)} days)")
 
     return {
         "persona_id": persona_id,
@@ -113,13 +184,62 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
         "schedule": days
     }
 
-async def regenerate_content(content_id: str, original_prompt: str, instruction: str = "") -> dict:
-    """T8: 一鍵重繪"""
-    enhanced = f"{original_prompt}, {instruction}" if instruction else original_prompt
-    image_url = await comfyui_service.generate_image(prompt=enhanced)
+async def regenerate_content(content_id: str, scene_prompt: str, instruction: str = "", persona_id: str = "") -> dict:
+    """一鍵重繪：正確重建 prompt 並帶入 face_image_url"""
+    from app.services.persona_storage import load_persona
+
+    # 取得人臉參考圖與外觀描述
+    face_image_url = ""
+    base_prompt = "attractive person, high quality, realistic"
+    if persona_id:
+        persona_data = load_persona(persona_id)
+        if persona_data:
+            face_image_url = persona_data.reference_face_url or ""
+
+    # 將重繪指令加入場景描述
+    enhanced_scene = f"{scene_prompt}, {instruction}" if instruction else scene_prompt
+
+    # 推斷攝影風格
+    SCENE_CAMERA_MAP = {
+        "night": "night", "neon": "night", "bar": "night",
+        "portrait": "portrait", "studio": "portrait",
+        "outdoor": "outdoor", "beach": "outdoor", "park": "outdoor",
+        "indoor": "indoor", "cafe": "indoor", "office": "indoor",
+    }
+    scene_lower = enhanced_scene.lower()
+    camera_style = "lifestyle"
+    for kw, style in SCENE_CAMERA_MAP.items():
+        if kw in scene_lower:
+            camera_style = style
+            break
+
+    # 正確重建 prompt（與原始生成流程一致）
+    full_prompt = comfyui_service.build_realism_prompt(
+        character_desc=base_prompt,
+        scene_prompt=enhanced_scene,
+        camera_style=camera_style,
+    )
+
+    replicate_url = await comfyui_service.generate_image(
+        prompt=full_prompt,
+        face_image_url=face_image_url,
+        camera_style=camera_style,
+    )
+
+    # 轉存 Cloudinary
+    image_url = replicate_url
+    if replicate_url:
+        try:
+            from app.services.cloudinary_service import upload_from_url
+            folder = f"virtual_prism/{persona_id}" if persona_id else "virtual_prism/regen"
+            image_url = await upload_from_url(replicate_url, folder=folder)
+        except Exception as cdn_err:
+            logger.warning(f"Cloudinary upload failed on regen, using Replicate URL: {cdn_err}")
+
     return {
         "content_id": content_id,
         "image_url": image_url,
+        "image_prompt": full_prompt,
         "seed": -1,
-        "status": "regenerated"
+        "status": "draft"
     }
