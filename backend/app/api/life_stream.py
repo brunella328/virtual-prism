@@ -9,9 +9,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 class GenerateScheduleRequest(BaseModel):
-    persona: dict
+    # persona 已移除：後端直接從 persona_storage 讀取，前端不需傳入
     appearance_prompt: Optional[str] = ""
-    # face_image_url 已移除：改為自動從存儲的 persona 讀取 reference_face_url
 
 class RegenerateRequest(BaseModel):
     scene_prompt: str           # 原始場景描述（Claude 生成的 scene_prompt）
@@ -28,8 +27,7 @@ async def generate_schedule(persona_id: str, req: GenerateScheduleRequest):
     try:
         return await life_stream_service.generate_weekly_schedule(
             persona_id=persona_id,
-            persona=req.persona,
-            appearance_prompt=req.appearance_prompt or ""
+            appearance_prompt=req.appearance_prompt or "",
         )
     except ValueError as e:
         # Persona 不存在或 JSON 格式錯誤

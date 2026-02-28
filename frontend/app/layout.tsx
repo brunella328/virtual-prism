@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { UserProvider } from '@/contexts/UserContext'
 
 export const metadata: Metadata = {
   title: 'Virtual Prism',
@@ -12,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-TW">
-      <body>{children}</body>
+      <body>
+        <UserProvider>{children}</UserProvider>
+      </body>
     </html>
   )
 }

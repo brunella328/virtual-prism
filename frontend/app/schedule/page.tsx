@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useUser } from '@/contexts/UserContext'
 import Navbar from '@/components/Navbar'
 import ToastContainer from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
@@ -8,19 +9,19 @@ import { getScheduledPosts, cancelScheduledPost } from '@/lib/api'
 
 export default function SchedulePage() {
   const router = useRouter()
+  const { userId, isAuthenticated } = useUser()
   const { toasts, addToast, removeToast } = useToast()
   const [jobs, setJobs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const userId = localStorage.getItem('vp_user_id')
-    if (!userId) { router.replace('/onboarding'); return }
+    if (!isAuthenticated) { router.replace('/onboarding'); return }
 
-    getScheduledPosts(userId)
+    getScheduledPosts(userId!)
       .then(data => setJobs(data.scheduled_posts || []))
       .catch(() => addToast('載入排程失敗', 'error'))
       .finally(() => setLoading(false))
-  }, [router])
+  }, [isAuthenticated, userId, router])
 
   const handleCancel = async (jobId: string) => {
     try {

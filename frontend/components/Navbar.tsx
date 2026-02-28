@@ -1,8 +1,7 @@
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { useUser } from '@/contexts/UserContext'
+import { disconnectInstagram } from '@/lib/api'
 
 const NAV_LINKS = [
   { href: '/onboarding', label: '人設' },
@@ -13,29 +12,21 @@ const NAV_LINKS = [
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const [igUsername, setIgUsername] = useState('')
-
-  useEffect(() => {
-    const username = localStorage.getItem('vp_ig_username') || ''
-    setIgUsername(username)
-  }, [])
+  const { userId, igUsername, logout } = useUser()
 
   const handleLogout = async () => {
-    const userId = localStorage.getItem('vp_user_id')
     if (userId) {
-      fetch(`${API}/api/instagram/token/${userId}`, { method: 'DELETE' }).catch(() => {})
+      disconnectInstagram(userId).catch(() => {})
     }
-    Object.keys(localStorage).filter(k => k.startsWith('vp_')).forEach(k => localStorage.removeItem(k))
+    logout()
     router.push('/onboarding')
   }
 
   return (
     <nav className="border-b border-gray-100 bg-white sticky top-0 z-50">
       <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-        {/* Logo */}
         <span className="font-bold text-lg tracking-tight">Virtual Prism 🌈</span>
 
-        {/* Nav links */}
         <div className="flex items-center gap-6">
           {NAV_LINKS.map(({ href, label }) => (
             <a
@@ -52,7 +43,6 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Account + logout */}
         <div className="flex items-center gap-3">
           {igUsername && (
             <span className="text-sm text-gray-500">@{igUsername}</span>

@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useUser } from '@/contexts/UserContext'
+import { storage } from '@/lib/storage'
 import WeekCalendar from '@/components/life-stream/WeekCalendar'
 import Navbar from '@/components/Navbar'
 import ToastContainer from '@/components/Toast'
@@ -19,6 +21,7 @@ const GENERATION_STEPS = [
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { userId, isAuthenticated, appearancePrompt } = useUser()
   const { toasts, addToast, removeToast } = useToast()
   const [schedule, setSchedule] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,54 +31,43 @@ export default function DashboardPage() {
 
   // Auth guard
   useEffect(() => {
-    const userId = localStorage.getItem('vp_user_id')
-    if (!userId) { router.replace('/onboarding'); return }
+    if (!isAuthenticated) { router.replace('/onboarding'); return }
 
-    // Load IG status
-    getInstagramStatus(userId)
+    getInstagramStatus(userId!)
       .then(s => setIgConnected(!!s.connected))
       .catch(() => setIgConnected(false))
-  }, [router])
+  }, [isAuthenticated, userId, router])
 
   // Load schedule on mount
   useEffect(() => {
-    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id')
-    if (!personaId) { generateSchedule(); return }
+    if (!userId) return
 
-    fetch(`${API}/api/life-stream/schedule/${personaId}`)
+    fetch(`${API}/api/life-stream/schedule/${userId}`)
       .then(r => r.json())
       .then(data => {
         const posts = data.posts || []
         if (posts.length > 0) {
           setSchedule(posts)
-          localStorage.setItem('vp_schedule', JSON.stringify(posts))
+          storage.setSchedule(posts)
           setLoading(false)
         } else {
           generateSchedule()
         }
       })
       .catch(() => {
-        const cached = localStorage.getItem('vp_schedule')
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached)
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setSchedule(parsed)
-              setLoading(false)
-              return
-            }
-          } catch {}
+        const cached = storage.getSchedule()
+        if (cached && cached.length > 0) {
+          setSchedule(cached)
+          setLoading(false)
+          return
         }
         generateSchedule()
       })
-  }, [])
+  }, [userId])
 
   const generateSchedule = async () => {
-    const personaId = localStorage.getItem('vp_persona_id')
-    const personaRaw = localStorage.getItem('vp_persona')
-    const appearancePrompt = localStorage.getItem('vp_appearance_prompt') || ''
-    if (!personaId || !personaRaw) {
-      addToast('找不到人設資料，請先完成 Onboarding', 'error')
+    if (!userId) {
+      addToast('找不到帳號資料，請先完成 Onboarding', 'error')
       setLoading(false)
       return
     }
@@ -83,7 +75,6 @@ export default function DashboardPage() {
     setLoading(true)
     setGenerationStep('planning')
 
-    // 模擬分段進度（每步約 12 秒）
     const stepKeys = GENERATION_STEPS.map(s => s.key)
     let stepIdx = 0
     const timer = setInterval(() => {
@@ -93,11 +84,11 @@ export default function DashboardPage() {
     }, 12000)
 
     try {
-      const persona = JSON.parse(personaRaw)
-      const res = await fetch(`${API}/api/life-stream/generate-schedule/${personaId}`, {
+      const res = await fetch(`${API}/api/life-stream/generate-schedule/${userId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona, appearance_prompt: appearancePrompt, face_image_url: '' }),
+        // 後端從 persona_storage 讀取 persona，只需傳 appearance_prompt
+        body: JSON.stringify({ appearance_prompt: appearancePrompt }),
       })
       clearInterval(timer)
       if (!res.ok) {
@@ -107,7 +98,7 @@ export default function DashboardPage() {
       const data = await res.json()
       const newSchedule = data.schedule || data
       setSchedule(newSchedule)
-      localStorage.setItem('vp_schedule', JSON.stringify(newSchedule))
+      storage.setSchedule(newSchedule)
       addToast('排程生成完成 ✓', 'success')
     } catch (e) {
       clearInterval(timer)
@@ -120,8 +111,7 @@ export default function DashboardPage() {
 
   const handleRegenerate = async (day: number, instruction?: string) => {
     const item = schedule.find(s => s.day === day)
-    if (!item) return
-    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id') || ''
+    if (!item || !userId) return
     setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'regenerating' } : s))
     try {
       const res = await fetch(`${API}/api/life-stream/regenerate/${day}`, {
@@ -130,12 +120,11 @@ export default function DashboardPage() {
         body: JSON.stringify({
           scene_prompt: item.scene_prompt || item.image_prompt,
           instruction: instruction || '',
-          persona_id: personaId,
+          persona_id: userId,
         }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const result = await res.json()
-      // 不直接覆蓋，先暫存等待用戶確認
       setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
       setPendingRegen({ day, image_url: result.image_url, image_prompt: result.image_prompt })
       addToast('重繪完成，請確認是否套用', 'info')
@@ -151,7 +140,7 @@ export default function DashboardPage() {
       const updated = prev.map(s => s.day === pendingRegen.day
         ? { ...s, image_url: pendingRegen.image_url, image_prompt: pendingRegen.image_prompt }
         : s)
-      localStorage.setItem('vp_schedule', JSON.stringify(updated))
+      storage.setSchedule(updated)
       return updated
     })
     setPendingRegen(null)
@@ -159,11 +148,10 @@ export default function DashboardPage() {
   }
 
   const handlePublishNow = async (day: number) => {
-    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id')
     const item = schedule.find(s => s.day === day)
-    if (!personaId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
+    if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
     try {
-      const result = await publishNow(personaId, item.image_url, item.caption)
+      const result = await publishNow(userId, item.image_url, item.caption)
       addToast(`發布成功 ✓ Media ID: ${result.media_id}`, 'success')
       setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'published' } : s))
     } catch (e) {
@@ -172,11 +160,10 @@ export default function DashboardPage() {
   }
 
   const handleSchedulePost = async (day: number, publishAt: string) => {
-    const personaId = localStorage.getItem('vp_persona_id') || localStorage.getItem('vp_user_id')
     const item = schedule.find(s => s.day === day)
-    if (!personaId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
+    if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
     try {
-      await scheduleInstagramPosts(personaId, [{
+      await scheduleInstagramPosts(userId, [{
         image_url: item.image_url,
         caption: item.caption,
         publish_at: new Date(publishAt).toISOString(),
@@ -208,7 +195,7 @@ export default function DashboardPage() {
                 <p className="text-gray-500 text-sm mt-1">3 天排程</p>
               </div>
               <button
-                onClick={() => { localStorage.removeItem('vp_schedule'); generateSchedule() }}
+                onClick={() => { storage.clearSchedule(); generateSchedule() }}
                 disabled={!!generationStep}
                 className="border px-4 py-2 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50"
               >

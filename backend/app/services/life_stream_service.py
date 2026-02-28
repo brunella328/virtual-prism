@@ -6,6 +6,9 @@ import anthropic
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from app.services import comfyui_service
+from app.services.persona_storage import load_persona
+from app.services.schedule_storage import save_schedule
+from app.services.cloudinary_service import upload_from_url
 
 logger = logging.getLogger(__name__)
 
@@ -41,22 +44,26 @@ scene_prompt 範例（V7 真實感版本，參考用）：
 4. **背景雜亂**：clutter、equipment、bottles、messy environment
 5. **手機感**：candid、unstaged、social media compression feel"""
 
-async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_prompt: str = "") -> dict:
+async def generate_weekly_schedule(persona_id: str, appearance_prompt: str = "") -> dict:
     """T6: 根據人設生成 3 天圖文排程（含生圖）
-    
-    人臉參考圖自動從存儲的 persona 讀取，不再需要前端傳入。
+
+    persona JSON 直接從 storage 讀取，前端只需提供 persona_id。
     降低為 3 天以減少 API 呼叫次數，避免 rate limit。
     """
-    from app.services.persona_storage import load_persona
-    
-    # 從存儲讀取 persona，取得 reference_face_url
+    # 從存儲讀取 persona（唯一來源，不依賴前端傳入）
     persona_data = load_persona(persona_id)
     if not persona_data:
         raise ValueError(f"Persona {persona_id} 不存在。請先完成 Onboarding 創建人設。")
-    
-    # 使用 Cloudinary 上的參考臉照（#71 完成後啟用）
+
+    # persona dict 給 LLM 規劃用
+    persona = persona_data.model_dump(exclude={"reference_face_url", "created_at", "id"})
     face_image_url = persona_data.reference_face_url or ""
-    base_prompt = appearance_prompt or "attractive person, high quality, realistic"
+    # appearance_prompt 優先用前端傳入的，fallback 到 persona 內儲存的
+    base_prompt = (
+        appearance_prompt
+        or (persona_data.appearance.image_prompt if persona_data.appearance else "")
+        or "attractive person, high quality, realistic"
+    )
     start_date = datetime.now()
 
     # Step 1: LLM 規劃 3 天內容
@@ -137,7 +144,6 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
             # 轉存 Cloudinary，避免 Replicate URL ~1h 失效
             if replicate_url:
                 try:
-                    from app.services.cloudinary_service import upload_from_url
                     image_url = await upload_from_url(
                         replicate_url,
                         folder=f"virtual_prism/{persona_id}"
@@ -174,7 +180,6 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
         days.append(day_result)
 
     # 生圖完成後持久化排程
-    from app.services.schedule_storage import save_schedule
     save_schedule(persona_id, days)
     logger.info(f"Schedule saved for persona_id={persona_id} ({len(days)} days)")
 
@@ -186,8 +191,6 @@ async def generate_weekly_schedule(persona_id: str, persona: dict, appearance_pr
 
 async def regenerate_content(content_id: str, scene_prompt: str, instruction: str = "", persona_id: str = "") -> dict:
     """一鍵重繪：正確重建 prompt 並帶入 face_image_url"""
-    from app.services.persona_storage import load_persona
-
     # 取得人臉參考圖與外觀描述
     face_image_url = ""
     base_prompt = "attractive person, high quality, realistic"
@@ -230,7 +233,6 @@ async def regenerate_content(content_id: str, scene_prompt: str, instruction: st
     image_url = replicate_url
     if replicate_url:
         try:
-            from app.services.cloudinary_service import upload_from_url
             folder = f"virtual_prism/{persona_id}" if persona_id else "virtual_prism/regen"
             image_url = await upload_from_url(replicate_url, folder=folder)
         except Exception as cdn_err:

@@ -1,7 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useUser } from '@/contexts/UserContext'
 import { connectWithToken } from '@/lib/api'
+import { storage } from '@/lib/storage'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -30,6 +32,8 @@ type Step = 'connect' | 'input' | 'analyzing' | 'done'
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const { userId, connect, setAppearancePrompt } = useUser()
+
   const [step, setStep] = useState<Step>('connect')
 
   // Step 1 — IG Token
@@ -46,31 +50,26 @@ export default function OnboardingPage() {
   const [appearanceData, setAppearanceData] = useState<AppearanceData | null>(null)
   const [persona, setPersona] = useState<PersonaResult | null>(null)
 
-  // 頁面載入：依 localStorage 決定起始 step
+  // 頁面載入：依 context 決定起始 step
   useEffect(() => {
-    const userId = localStorage.getItem('vp_user_id')
-    const personaId = localStorage.getItem('vp_persona_id')
     if (!userId) { setStep('connect'); return }
-    if (personaId) {
-      // 有人設 → 從後端讀，顯示 done
-      fetch(`${API}/api/genesis/persona/${personaId}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data) {
-            setPersona({ persona_id: data.persona_id, persona: data.persona })
-            const savedDescription = localStorage.getItem('vp_description')
-            if (savedDescription) setDescription(savedDescription)
-            if (data.persona.appearance) setAppearanceData(data.persona.appearance)
-            setStep('done')
-          } else {
-            setStep('input')
+
+    // 已連結 IG，嘗試從後端讀取既有人設
+    fetch(`${API}/api/genesis/persona/${userId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setPersona({ persona_id: data.persona_id, persona: data.persona })
+          if (data.persona.appearance) {
+            setAppearanceData(data.persona.appearance)
           }
-        })
-        .catch(() => setStep('input'))
-    } else {
-      setStep('input')
-    }
-  }, [])
+          setStep('done')
+        } else {
+          setStep('input')
+        }
+      })
+      .catch(() => setStep('input'))
+  }, [userId])
 
   // ── Step 1：連結 IG ──────────────────────────────────────────────────────
   const handleConnectToken = async () => {
@@ -79,8 +78,8 @@ export default function OnboardingPage() {
     setTokenError('')
     try {
       const result = await connectWithToken('temp', tokenInput.trim())
-      localStorage.setItem('vp_user_id', result.ig_account_id)
-      localStorage.setItem('vp_ig_username', result.ig_username)
+      // connect() 同時更新 React context 與 localStorage
+      connect(result.ig_account_id, result.ig_username)
       setTokenInput('')
       setStep('input')
     } catch (e) {
@@ -141,10 +140,9 @@ export default function OnboardingPage() {
         setAppearanceData(localAppearance)
       }
 
-      const igUserId = localStorage.getItem('vp_user_id')
       const formData2 = new FormData()
       formData2.append('description', description)
-      if (igUserId) formData2.append('persona_id', igUserId)
+      if (userId) formData2.append('persona_id', userId)
       if (files && files.length > 0) formData2.append('reference_image', files[0])
 
       const personaRes = await fetch(`${API}/api/genesis/create-persona`, { method: 'POST', body: formData2 })
@@ -152,11 +150,10 @@ export default function OnboardingPage() {
       const personaResult: PersonaResult = await personaRes.json()
       setPersona(personaResult)
 
-      localStorage.setItem('vp_persona_id', personaResult.persona_id)
-      localStorage.setItem('vp_persona', JSON.stringify(personaResult.persona))
-      localStorage.setItem('vp_description', description)
-      localStorage.setItem('vp_appearance_prompt', localAppearance?.image_prompt || '')
-      if (localAppearance) localStorage.setItem('vp_appearance_detail', JSON.stringify(localAppearance))
+      // 透過 context 同步 appearance prompt（storage 同步已在 context 內完成）
+      if (localAppearance?.image_prompt) {
+        setAppearancePrompt(localAppearance.image_prompt)
+      }
 
       setStep('done')
     } catch (err) {
@@ -224,7 +221,7 @@ export default function OnboardingPage() {
         </button>
         <button
           onClick={() => {
-            localStorage.removeItem('vp_schedule')
+            storage.clearSchedule()
             router.push('/dashboard')
           }}
           className="flex-2 flex-grow-[2] bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 text-sm"
