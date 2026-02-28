@@ -22,18 +22,26 @@ async def list_fans(persona_id: str, limit: int = 20):
     Return up to `limit` fan records for the given persona,
     sorted by interaction_count (descending).
     """
-    fans = fan_memory_service.list_fans(persona_id, limit=limit)
-    return {
-        "persona_id": persona_id,
-        "fans": fans,
-        "count": len(fans),
-    }
+    try:
+        fans = fan_memory_service.list_fans(persona_id, limit=limit)
+        return {
+            "persona_id": persona_id,
+            "fans": fans,
+            "count": len(fans),
+        }
+    except Exception as e:
+        logger.exception("list_fans failed for persona_id=%s", persona_id)
+        raise HTTPException(status_code=500, detail={"error": "list_fans_failed", "detail": str(e)})
 
 
 @router.get("/{persona_id}/{fan_id}")
 async def get_fan(persona_id: str, fan_id: str):
     """Return a single fan record for the given persona + fan."""
-    record = fan_memory_service.get_fan(persona_id, fan_id)
+    try:
+        record = fan_memory_service.get_fan(persona_id, fan_id)
+    except Exception as e:
+        logger.exception("get_fan failed for persona_id=%s fan_id=%s", persona_id, fan_id)
+        raise HTTPException(status_code=500, detail={"error": "get_fan_failed", "detail": str(e)})
     if record is None:
         raise HTTPException(
             status_code=404,

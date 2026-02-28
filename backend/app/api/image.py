@@ -1,8 +1,12 @@
-from fastapi import APIRouter
+import logging
+
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from app.services import comfyui_service
 from app.services.ai_detector_service import detect_ai_image
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,27 +29,35 @@ class RetestRequest(BaseModel):
 @router.post("/generate")
 async def generate(req: GenerateRequest):
     """生成圖片（Mode A: kontext-max，Mode B: flux-dev-realism）"""
-    image_url = await comfyui_service.generate_image(
-        prompt=req.prompt,
-        seed=req.seed,
-        face_image_url=req.face_image_url,
-        camera_style=req.camera_style,
-    )
-    return {"image_url": image_url}
+    try:
+        image_url = await comfyui_service.generate_image(
+            prompt=req.prompt,
+            seed=req.seed,
+            face_image_url=req.face_image_url,
+            camera_style=req.camera_style,
+        )
+        return {"image_url": image_url}
+    except Exception as e:
+        logger.exception("Image generation failed")
+        raise HTTPException(status_code=500, detail={"error": "generation_failed", "detail": str(e)})
 
 
 @router.post("/retest")
 async def retest(req: RetestRequest):
     """T5: 回測 endpoint — 生圖 + Hive AI 分數"""
-    image_url = await comfyui_service.generate_image(
-        prompt=req.prompt,
-        seed=req.seed,
-        face_image_url=req.face_image_url,
-        camera_style=req.camera_style,
-    )
-    hive_score = await detect_ai_image(image_url) if image_url else -1.0
-    return {
-        "image_url": image_url,
-        "hive_score": hive_score,
-        "pass": hive_score != -1.0 and hive_score < 0.3,
-    }
+    try:
+        image_url = await comfyui_service.generate_image(
+            prompt=req.prompt,
+            seed=req.seed,
+            face_image_url=req.face_image_url,
+            camera_style=req.camera_style,
+        )
+        hive_score = await detect_ai_image(image_url) if image_url else -1.0
+        return {
+            "image_url": image_url,
+            "hive_score": hive_score,
+            "pass": hive_score != -1.0 and hive_score < 0.3,
+        }
+    except Exception as e:
+        logger.exception("Retest failed")
+        raise HTTPException(status_code=500, detail={"error": "retest_failed", "detail": str(e)})

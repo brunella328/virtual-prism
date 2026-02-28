@@ -1,4 +1,6 @@
 import os
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -33,6 +35,35 @@ _PUBLIC_PATHS = {
     "/api/instagram/callback",
     "/api/interact/webhook/instagram",
 }
+
+# Rate limiting: sliding window per key
+_RATE_LIMITS = {
+    "/api/genesis/analyze-appearance":     {"max": 5, "window": 60},
+    "/api/life-stream/generate-schedule/": {"max": 2, "window": 60},
+}
+_rate_store: dict = defaultdict(list)
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    path = request.url.path
+    for prefix, limits in _RATE_LIMITS.items():
+        if path.startswith(prefix):
+            # Key: last path segment (persona_id) or client IP
+            client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+            key = f"{prefix}:{path.split('/')[-1] or client_ip}"
+            now = time.monotonic()
+            window = limits["window"]
+            _rate_store[key] = [t for t in _rate_store[key] if now - t < window]
+            if len(_rate_store[key]) >= limits["max"]:
+                return JSONResponse(
+                    {"error": "rate_limit_exceeded", "detail": f"最多每 {window} 秒 {limits['max']} 次"},
+                    status_code=429,
+                    headers={"Retry-After": str(window)},
+                )
+            _rate_store[key].append(now)
+            break
+    return await call_next(request)
 
 
 @app.middleware("http")
