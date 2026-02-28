@@ -92,6 +92,11 @@ class UpdatePostContentRequest(BaseModel):
     scene_prompt: str
 
 
+class UpdatePostImageRequest(BaseModel):
+    image_url: str
+    image_prompt: str
+
+
 @router.patch("/schedule/{persona_id}/{day}/status")
 async def update_post_status(persona_id: str, day: int, req: UpdatePostStatusRequest):
     """更新單篇貼文狀態"""
@@ -108,6 +113,17 @@ async def update_post_content(persona_id: str, day: int, req: UpdatePostContentR
     _verify_persona(persona_id)
     from app.services.schedule_storage import update_post_content
     ok = update_post_content(persona_id, day, req.caption, req.scene_prompt)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
+    return {"ok": True, "day": day}
+
+
+@router.patch("/schedule/{persona_id}/{day}/image")
+async def update_post_image(persona_id: str, day: int, req: UpdatePostImageRequest):
+    """套用重繪結果：持久化新的 image_url 與 image_prompt"""
+    _verify_persona(persona_id)
+    from app.services.schedule_storage import update_post_image
+    ok = update_post_image(persona_id, day, req.image_url, req.image_prompt)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
     return {"ok": True, "day": day}

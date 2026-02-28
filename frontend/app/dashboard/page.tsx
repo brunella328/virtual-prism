@@ -134,17 +134,30 @@ export default function DashboardPage() {
     }
   }
 
-  const handleApplyRegen = () => {
-    if (!pendingRegen) return
+  const handleApplyRegen = async () => {
+    if (!pendingRegen || !userId) return
+    const { day, image_url, image_prompt } = pendingRegen
+    // 先更新本地 state + localStorage
     setSchedule(prev => {
-      const updated = prev.map(s => s.day === pendingRegen.day
-        ? { ...s, image_url: pendingRegen.image_url, image_prompt: pendingRegen.image_prompt }
+      const updated = prev.map(s => s.day === day
+        ? { ...s, image_url, image_prompt }
         : s)
       storage.setSchedule(updated)
       return updated
     })
     setPendingRegen(null)
-    addToast('已套用新圖片 ✓', 'success')
+    // 持久化到後端，避免重整後回到舊圖
+    try {
+      const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${day}/image`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url, image_prompt }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      addToast('已套用新圖片 ✓', 'success')
+    } catch (e) {
+      addToast(`圖片已套用，但後端儲存失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
   }
 
   const handleSaveContent = async (day: number, caption: string, scenePrompt: string) => {

@@ -84,3 +84,17 @@ def update_post_content(persona_id: str, day: int, caption: str, scene_prompt: s
             save_schedule(persona_id, posts)
             return True
     return False
+
+
+def update_post_image(persona_id: str, day: int, image_url: str, image_prompt: str) -> bool:
+    """套用重繪結果：更新 image_url 與 image_prompt"""
+    posts = load_schedule(persona_id)
+    if not posts:
+        return False
+    for post in posts:
+        if post.get("day") == day:
+            post["image_url"] = image_url
+            post["image_prompt"] = image_prompt
+            save_schedule(persona_id, posts)
+            return True
+    return False
