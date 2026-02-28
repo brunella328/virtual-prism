@@ -14,7 +14,7 @@ from typing import Optional
 
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.jobstores.memory import MemoryJobStore
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ import json
 from pathlib import Path
 
 _TOKEN_FILE = Path(__file__).parent.parent.parent / "data" / "instagram_tokens.json"
+_SCHEDULER_DB = Path(__file__).parent.parent.parent / "data" / "scheduler.db"
 
 def _load_token_store() -> dict:
     """從 JSON 檔案讀取 token store（backend 重啟後恢復）"""
@@ -82,7 +83,7 @@ def _init_env_token() -> None:
     """If INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID are set in env,
     pre-seed the token store as persona_id='default' so the app works
     immediately without going through the OAuth flow."""
-    if _ENV_ACCESS_TOKEN and _ENV_USER_ID:
+    if _ENV_ACCESS_TOKEN and _ENV_USER_ID and "default" not in _token_store:
         _token_store["default"] = {
             "access_token": _ENV_ACCESS_TOKEN,
             "ig_account_id": _ENV_USER_ID,
@@ -96,8 +97,9 @@ _init_env_token()
 # ---------------------------------------------------------------------------
 # APScheduler
 # ---------------------------------------------------------------------------
+_SCHEDULER_DB.parent.mkdir(parents=True, exist_ok=True)
 _scheduler = BackgroundScheduler(
-    jobstores={"default": MemoryJobStore()},
+    jobstores={"default": SQLAlchemyJobStore(url=f"sqlite:///{_SCHEDULER_DB}")},
     timezone="UTC",
 )
 
@@ -185,20 +187,7 @@ def refresh_instagram_token(persona_id: str = "default") -> None:
         _token_store[persona_id]["refreshed_at"] = datetime.now(timezone.utc).isoformat()
         _token_store[persona_id]["expires_in"] = expires_in
 
-        # Update .env for restart persistence (overwrite INSTAGRAM_ACCESS_TOKEN line)
-        env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
-        env_path = os.path.abspath(env_path)
-        if os.path.exists(env_path):
-            with open(env_path, "r") as f:
-                lines = f.readlines()
-            with open(env_path, "w") as f:
-                for line in lines:
-                    if line.startswith("INSTAGRAM_ACCESS_TOKEN="):
-                        f.write(f"INSTAGRAM_ACCESS_TOKEN={new_token}\n")
-                    else:
-                        f.write(line)
-            logger.info("Updated INSTAGRAM_ACCESS_TOKEN in .env")
-        _save_token_store()
+        _save_token_store()   # JSON 持久化（重啟後恢復）
 
         logger.info("Token refreshed successfully for persona_id=%s", persona_id)
         _send_telegram(

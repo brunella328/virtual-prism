@@ -20,3 +20,5 @@ node_modules/
 
 # Runtime data (sensitive)
 backend/data/
+backend/data/scheduler.db
+backend/data/scheduler.db-journal
