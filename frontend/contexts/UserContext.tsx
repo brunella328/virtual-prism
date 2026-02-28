@@ -7,7 +7,7 @@
  * - 任何 auth 狀態變更（connect / logout）必須透過此 context
  * - storage.ts 是唯一的 localStorage 入口
  */
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { storage } from '@/lib/storage'
 
 // ---------------------------------------------------------------------------
@@ -41,12 +41,21 @@ export interface UserContextType extends UserState {
 const UserContext = createContext<UserContextType | null>(null)
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<UserState>(() => ({
-    // 從 storage 讀取初始值（做過 SSR guard，server side 回傳 null）
-    userId: storage.getUserId(),
-    igUsername: storage.getIgUsername(),
-    appearancePrompt: storage.getAppearancePrompt(),
-  }))
+  // Start with null/empty to match server render — avoids hydration mismatch
+  const [state, setState] = useState<UserState>({
+    userId: null,
+    igUsername: null,
+    appearancePrompt: '',
+  })
+
+  // Load from localStorage only after hydration (client only)
+  useEffect(() => {
+    setState({
+      userId: storage.getUserId(),
+      igUsername: storage.getIgUsername(),
+      appearancePrompt: storage.getAppearancePrompt(),
+    })
+  }, [])
 
   const connect = useCallback((
     userId: string,
