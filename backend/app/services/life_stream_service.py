@@ -32,9 +32,21 @@ SINGLE_POST_PROMPT = """你是一個 AI 網紅內容規劃師。
 {
   "scene": "場景描述（中文，25字以內）",
   "caption": "Instagram 文案（中文，含 1-2 個 emoji，80字以內）",
-  "scene_prompt": "詳細場景描述（英文，60-100字）：包含場景環境、光線、動作、表情、真實手機照片的物理缺陷（如：汗水閃爍、皮膚油光、衣服污漬與皺褶、頭髮黏臉、嘴微張、眼神看向畫面外、手機畸變、雜亂背景、harsh lighting、blown-out highlights、crushed shadows）。營造偷拍感與未修圖的真實瞬間。",
+  "scene_prompt": "詳細場景描述（英文，60-100字）：包含場景環境、光線、動作、表情、**真實手機照片的物理缺陷**（如：汗水閃爍、皮膚油光、衣服污漬與皺褶、頭髮黏臉、嘴微張、眼神看向畫面外、手機畸變、雜亂背景、harsh lighting、blown-out highlights、crushed shadows）。營造「偷拍感」與「未修圖的真實瞬間」。不要描述人物基本外觀（臉型、髮色等由系統統一注入），但要描述當下的狀態細節",
   "hashtags": ["#tag1", "#tag2", "#tag3"]
-}"""
+}
+
+scene_prompt 範例（V7 真實感版本，參考用）：
+- 健身房："lying on gym mat after intense workout, exhausted expression with mouth slightly open panting, drenched in sweat with glistening forehead and collarbone, beads of perspiration visible, flushed red cheeks, clumped wet hair sticking to sweaty face and neck, eyes looking at water bottle off-camera, harsh overhead gym fluorescent creating blown-out highlights on sweaty skin, crushed shadows under equipment, messy gym clutter in background with towels and bottles, unstaged candid moment"
+- 咖啡廳："at messy Taipei coffee shop, caught mid-sentence with mouth slightly open, glistening forehead with light perspiration, small mole on cheek, wrinkled t-shirt with visible coffee stain near collar, messy hair strands stuck to face, eyes looking at menu off-camera with natural gaze, cheap oxidized silver necklace visible, harsh overhead fluorescent creating half face in shadow, crushed blacks in dark areas, cluttered cafe background with cups and bags on table, social media compression artifacts feel"
+- 夜市："eating noodles mid-chew with mouth open showing food, visible sauce stain on shirt collar, sweaty forehead glistening under harsh night market fluorescent, matted hair stuck to face from humidity, small mole visible on cheek, eyes looking down at bowl naturally, harsh overhead lighting creating blown-out highlights and crushed shadows, messy food stall background with equipment and condiment bottles visible through soft blur, unstaged candid eating moment"
+
+scene_prompt 必須包含：
+1. **真實瑕疵**：汗水、油光、污漬、皺褶、痣、不對稱
+2. **動態瞬間**：嘴微張、眼神看向畫面外、mid-action
+3. **光線缺陷**：harsh lighting、blown-out highlights、crushed shadows
+4. **背景雜亂**：clutter、equipment、bottles、messy environment
+5. **手機感**：candid、unstaged、social media compression feel"""
 
 SCHEDULE_PROMPT = """你是一個 AI 網紅內容規劃師。
 根據以下人設 JSON，為這個 AI 網紅規劃未來 3 天的 Instagram 圖文內容。
