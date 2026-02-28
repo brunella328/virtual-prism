@@ -6,6 +6,7 @@ interface DayContent {
   date: string
   scene: string
   caption: string
+  scene_prompt?: string
   image_url?: string
   seed: number
   status: 'draft' | 'approved' | 'published' | 'rejected' | 'regenerating'
@@ -18,6 +19,7 @@ interface WeekCalendarProps {
   onRegenerate: (day: number, instruction?: string) => void
   onPublishNow: (day: number) => void
   onSchedule: (day: number, publishAt: string) => void
+  onSaveContent: (day: number, caption: string, scenePrompt: string) => Promise<void>
   igConnected: boolean
   pendingRegen: { day: number; image_url: string } | null
   onApplyRegen: () => void
@@ -38,13 +40,17 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function WeekCalendar({
   schedule, onRegenerate,
-  onPublishNow, onSchedule, igConnected,
+  onPublishNow, onSchedule, onSaveContent, igConnected,
   pendingRegen, onApplyRegen, onDiscardRegen,
 }: WeekCalendarProps) {
   const [selected, setSelected] = useState<DayContent | null>(null)
   const [regenInstruction, setRegenInstruction] = useState('')
   const [scheduleTime, setScheduleTime] = useState('')
   const [confirmPublish, setConfirmPublish] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editCaption, setEditCaption] = useState('')
+  const [editScenePrompt, setEditScenePrompt] = useState('')
+  const [saving, setSaving] = useState(false)
 
   // Keep selected in sync with schedule updates
   const selectedItem = selected ? schedule.find(s => s.day === selected.day) ?? selected : null
@@ -56,7 +62,7 @@ export default function WeekCalendar({
         {schedule.map((item) => (
           <button
             key={item.day}
-            onClick={() => { setSelected(item); setConfirmPublish(false); setScheduleTime('') }}
+            onClick={() => { setSelected(item); setConfirmPublish(false); setScheduleTime(''); setEditMode(false) }}
             className={`rounded-xl border-2 p-2 text-left transition-all hover:shadow-md ${
               selectedItem?.day === item.day ? 'border-black' : 'border-gray-100'
             }`}
@@ -154,12 +160,67 @@ export default function WeekCalendar({
           </div>
 
           {/* 文案 */}
-          <div className="bg-gray-50 rounded-xl p-4">
-            <p className="text-sm">{selectedItem.caption}</p>
-            {selectedItem.hashtags && (
-              <p className="text-xs text-blue-500 mt-2">{selectedItem.hashtags.join(' ')}</p>
-            )}
-          </div>
+          {editMode ? (
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">貼文文案</label>
+                <textarea
+                  value={editCaption}
+                  onChange={e => setEditCaption(e.target.value)}
+                  rows={4}
+                  className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">重繪方向（scene prompt）</label>
+                <textarea
+                  value={editScenePrompt}
+                  onChange={e => setEditScenePrompt(e.target.value)}
+                  rows={3}
+                  placeholder="描述畫面場景與氛圍，重繪時會使用此內容..."
+                  className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    setSaving(true)
+                    await onSaveContent(selectedItem.day, editCaption, editScenePrompt)
+                    setSaving(false)
+                    setEditMode(false)
+                  }}
+                  disabled={saving}
+                  className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40"
+                >
+                  {saving ? '儲存中...' : '儲存'}
+                </button>
+                <button
+                  onClick={() => setEditMode(false)}
+                  disabled={saving}
+                  className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-4 group relative">
+              <button
+                onClick={() => {
+                  setEditCaption(selectedItem.caption)
+                  setEditScenePrompt(selectedItem.scene_prompt || '')
+                  setEditMode(true)
+                }}
+                className="absolute top-3 right-3 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
+              >
+                ✏️ 編輯
+              </button>
+              <p className="text-sm pr-12">{selectedItem.caption}</p>
+              {selectedItem.hashtags && (
+                <p className="text-xs text-blue-500 mt-2">{selectedItem.hashtags.join(' ')}</p>
+              )}
+            </div>
+          )}
 
           {/* 重繪 */}
           <div className="flex gap-2">

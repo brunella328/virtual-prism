@@ -70,3 +70,17 @@ def update_post_status(persona_id: str, day: int, status: str) -> bool:
             save_schedule(persona_id, posts)
             return True
     return False
+
+
+def update_post_content(persona_id: str, day: int, caption: str, scene_prompt: str) -> bool:
+    """更新單篇貼文的文案與重繪方向"""
+    posts = load_schedule(persona_id)
+    if not posts:
+        return False
+    for post in posts:
+        if post.get("day") == day:
+            post["caption"] = caption
+            post["scene_prompt"] = scene_prompt
+            save_schedule(persona_id, posts)
+            return True
+    return False

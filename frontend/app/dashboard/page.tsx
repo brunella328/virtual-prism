@@ -147,6 +147,26 @@ export default function DashboardPage() {
     addToast('已套用新圖片 ✓', 'success')
   }
 
+  const handleSaveContent = async (day: number, caption: string, scenePrompt: string) => {
+    if (!userId) return
+    try {
+      const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${day}/content`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caption, scene_prompt: scenePrompt }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setSchedule(prev => {
+        const updated = prev.map(s => s.day === day ? { ...s, caption, scene_prompt: scenePrompt } : s)
+        storage.setSchedule(updated)
+        return updated
+      })
+      addToast('已儲存 ✓', 'success')
+    } catch (e) {
+      addToast(`儲存失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
+  }
+
   const handlePublishNow = async (day: number) => {
     const item = schedule.find(s => s.day === day)
     if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
@@ -208,6 +228,7 @@ export default function DashboardPage() {
               onRegenerate={handleRegenerate}
               onPublishNow={handlePublishNow}
               onSchedule={handleSchedulePost}
+              onSaveContent={handleSaveContent}
               igConnected={igConnected}
               pendingRegen={pendingRegen}
               onApplyRegen={handleApplyRegen}
