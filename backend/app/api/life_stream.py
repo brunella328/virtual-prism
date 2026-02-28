@@ -12,6 +12,10 @@ class GenerateScheduleRequest(BaseModel):
     # persona 已移除：後端直接從 persona_storage 讀取，前端不需傳入
     appearance_prompt: Optional[str] = ""
 
+class GeneratePostRequest(BaseModel):
+    date: str  # ISO format: "2026-03-15"
+    appearance_prompt: Optional[str] = ""
+
 class RegenerateRequest(BaseModel):
     scene_prompt: str           # 原始場景描述（Claude 生成的 scene_prompt）
     instruction: Optional[str] = ""
@@ -72,6 +76,36 @@ def _verify_persona(persona_id: str):
     status = get_connection_status(persona_id)
     if not status.get("connected"):
         raise HTTPException(status_code=403, detail=f"Unauthorized persona_id: {persona_id}")
+
+
+@router.post("/generate-post/{persona_id}")
+async def generate_post(persona_id: str, req: GeneratePostRequest):
+    """月曆模式：為指定日期生成單篇貼文（append，不覆蓋現有排程）"""
+    _verify_persona(persona_id)
+    from datetime import date as date_type
+    # 驗證日期格式
+    try:
+        date_type.fromisoformat(req.date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"日期格式錯誤，請使用 YYYY-MM-DD：{req.date}")
+    # 驗證每日上限（3 篇）
+    from app.services.schedule_storage import load_schedule
+    existing = load_schedule(persona_id)
+    day_count = sum(1 for p in existing if p.get("date") == req.date)
+    if day_count >= 3:
+        raise HTTPException(status_code=422, detail=f"{req.date} 已達每日上限（3 篇）")
+    try:
+        post = await life_stream_service.generate_single_post(
+            persona_id=persona_id,
+            date=req.date,
+            appearance_prompt=req.appearance_prompt or "",
+        )
+        return post
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"generate_post error: {e}")
+        raise HTTPException(status_code=500, detail=f"生成失敗：{str(e)}")
 
 
 @router.get("/schedule/{persona_id}")

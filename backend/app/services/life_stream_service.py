@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from app.services import comfyui_service
 from app.services.persona_storage import load_persona
-from app.services.schedule_storage import save_schedule
+from app.services.schedule_storage import save_schedule, load_schedule
 from app.services.cloudinary_service import upload_from_url
 
 logger = logging.getLogger(__name__)
@@ -15,6 +15,26 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+SCENE_CAMERA_MAP = {
+    "night": "night", "neon": "night", "bar": "night", "club": "night",
+    "portrait": "portrait", "studio": "portrait",
+    "outdoor": "outdoor", "beach": "outdoor", "park": "outdoor", "mountain": "outdoor",
+    "indoor": "indoor", "cafe": "indoor", "office": "indoor", "home": "indoor",
+}
+
+SINGLE_POST_PROMPT = """你是一個 AI 網紅內容規劃師。
+根據以下人設 JSON，為這個 AI 網紅規劃 1 篇 Instagram 圖文內容。
+
+**重要：必須用繁體中文，且只輸出單一 JSON 物件，不要任何前綴說明或註解！**
+
+輸出格式（嚴格的 JSON 物件）：
+{
+  "scene": "場景描述（中文，25字以內）",
+  "caption": "Instagram 文案（中文，含 1-2 個 emoji，80字以內）",
+  "scene_prompt": "詳細場景描述（英文，60-100字）：包含場景環境、光線、動作、表情、真實手機照片的物理缺陷（如：汗水閃爍、皮膚油光、衣服污漬與皺褶、頭髮黏臉、嘴微張、眼神看向畫面外、手機畸變、雜亂背景、harsh lighting、blown-out highlights、crushed shadows）。營造偷拍感與未修圖的真實瞬間。",
+  "hashtags": ["#tag1", "#tag2", "#tag3"]
+}"""
 
 SCHEDULE_PROMPT = """你是一個 AI 網紅內容規劃師。
 根據以下人設 JSON，為這個 AI 網紅規劃未來 3 天的 Instagram 圖文內容。
@@ -105,15 +125,7 @@ async def generate_weekly_schedule(persona_id: str, appearance_prompt: str = "")
             f"請重試，或檢查 Claude 是否返回了說明文字而非純 JSON。"
         ) from e
 
-    # Step 2: 為每天加入日期 + 呼叫生圖（並行，3天）
-    # 推斷攝影風格（依場景關鍵字）
-    SCENE_CAMERA_MAP = {
-        "night": "night", "neon": "night", "bar": "night", "club": "night",
-        "portrait": "portrait", "studio": "portrait",
-        "outdoor": "outdoor", "beach": "outdoor", "park": "outdoor", "mountain": "outdoor",
-        "indoor": "indoor", "cafe": "indoor", "office": "indoor", "home": "indoor",
-    }
-
+    # Step 2: 為每天加入日期 + 呼叫生圖
     async def generate_day(item: dict, offset: int) -> dict:
         date = (start_date + timedelta(days=offset)).strftime("%Y-%m-%d")
         scene_prompt = item.get("scene_prompt", item.get("image_prompt", "lifestyle photo"))
@@ -189,6 +201,95 @@ async def generate_weekly_schedule(persona_id: str, appearance_prompt: str = "")
         "schedule": days
     }
 
+async def generate_single_post(persona_id: str, date: str, appearance_prompt: str = "") -> dict:
+    """月曆模式：為指定日期生成單篇貼文並 append 到排程"""
+    persona_data = load_persona(persona_id)
+    if not persona_data:
+        raise ValueError(f"Persona {persona_id} 不存在。")
+
+    persona = persona_data.model_dump(exclude={"reference_face_url", "created_at", "id"})
+    face_image_url = persona_data.reference_face_url or ""
+    base_prompt = (
+        appearance_prompt
+        or (persona_data.appearance.image_prompt if persona_data.appearance else "")
+        or "attractive person, high quality, realistic"
+    )
+
+    # Step 1: LLM 規劃 1 篇內容
+    message = await client.messages.create(
+        model="claude-3-haiku-20240307",
+        max_tokens=512,
+        messages=[{
+            "role": "user",
+            "content": f"請為以下人設規劃 1 篇 Instagram 內容（日期：{date}）：\n{json.dumps(persona, ensure_ascii=False)}"
+        }],
+        system=SINGLE_POST_PROMPT,
+    )
+
+    raw = message.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:].strip()
+    json_start = raw.find("{")
+    if json_start > 0:
+        raw = raw[json_start:]
+    try:
+        item = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Claude 返回格式錯誤：{e}") from e
+
+    # Step 2: 生圖
+    scene_prompt = item.get("scene_prompt", "lifestyle photo")
+    scene_lower = scene_prompt.lower()
+    camera_style = "lifestyle"
+    for kw, style in SCENE_CAMERA_MAP.items():
+        if kw in scene_lower:
+            camera_style = style
+            break
+
+    full_prompt = comfyui_service.build_realism_prompt(
+        character_desc=base_prompt,
+        scene_prompt=scene_prompt,
+        camera_style=camera_style,
+    )
+
+    try:
+        replicate_url = await comfyui_service.generate_image(
+            prompt=full_prompt,
+            face_image_url=face_image_url,
+            camera_style=camera_style,
+        )
+        if replicate_url:
+            try:
+                image_url = await upload_from_url(replicate_url, folder=f"virtual_prism/{persona_id}")
+            except Exception as cdn_err:
+                logger.warning(f"Cloudinary upload failed: {cdn_err}")
+                image_url = replicate_url
+        else:
+            image_url = None
+    except Exception as e:
+        logger.error(f"Image generation failed for {date}: {e}")
+        image_url = None
+
+    # Step 3: Append 到現有排程
+    existing = load_schedule(persona_id)
+    next_day = max((p.get("day", 0) for p in existing), default=0) + 1
+
+    new_post = {
+        **item,
+        "day": next_day,
+        "date": date,
+        "image_url": image_url,
+        "image_prompt": full_prompt,
+        "seed": -1,
+        "status": "draft",
+    }
+    save_schedule(persona_id, existing + [new_post])
+    logger.info(f"Single post generated for persona={persona_id} date={date} day={next_day}")
+    return new_post
+
+
 async def regenerate_content(content_id: str, scene_prompt: str, instruction: str = "", persona_id: str = "") -> dict:
     """一鍵重繪：正確重建 prompt 並帶入 face_image_url"""
     # 取得人臉參考圖與外觀描述
@@ -202,13 +303,6 @@ async def regenerate_content(content_id: str, scene_prompt: str, instruction: st
     # 將重繪指令加入場景描述
     enhanced_scene = f"{scene_prompt}, {instruction}" if instruction else scene_prompt
 
-    # 推斷攝影風格
-    SCENE_CAMERA_MAP = {
-        "night": "night", "neon": "night", "bar": "night",
-        "portrait": "portrait", "studio": "portrait",
-        "outdoor": "outdoor", "beach": "outdoor", "park": "outdoor",
-        "indoor": "indoor", "cafe": "indoor", "office": "indoor",
-    }
     scene_lower = enhanced_scene.lower()
     camera_style = "lifestyle"
     for kw, style in SCENE_CAMERA_MAP.items():
