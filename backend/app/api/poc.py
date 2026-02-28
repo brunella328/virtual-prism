@@ -17,23 +17,58 @@ router = APIRouter(prefix="/poc", tags=["POC"])
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN", "")
 REPLICATE_BASE = "https://api.replicate.com/v1"
 
-REALISM_V6_RAW_LIFE = (
-    "raw grainy mobile phone photo, shot on iPhone front camera with wide-angle lens distortion, "
-    "1x focal length, face center slightly bulging, edges stretched, social media compression artifacts, "
-    "high ISO noise, low dynamic range, slightly out of focus, lens smudge, "
+# 基礎物理缺陷層（全場景適用）
+BASE_IMPERFECTIONS = (
+    "compressed jpeg artifacts, low bitrate compression, "
+    "heavy digital noise, social media compression artifacts, "
+    "poor focus on background, accidental finger slightly covering lens corner, "
+    "messy background clutter"
+)
+
+# LDR 真實感核心（低動態範圍邏輯）
+LDR_REALISM_CORE = (
+    "low dynamic range, heavy digital noise, shot on iPhone 12 front camera, "
+    "yellowish white balance, blown-out highlights, crushed deep shadows, "
+    "motion blur, poor focus, chromatic aberration, "
+    "purple fringing on edges, harsh flat lighting, "
+    "unedited raw mobile upload"
+)
+
+# 場景模組 1：閃光燈模式（室內/夜間自拍）
+FLASH_MODE = (
+    "direct flash photography, high contrast, harsh shadows against the wall, "
+    "oily skin reflection, slight red-eye effect, dark underexposed background, "
+    "blue tint from flash"
+)
+
+# 場景模組 2：平淡日常模式（咖啡廳/戶外）
+CASUAL_MODE = (
+    "bland flat lighting, hazy atmosphere, low contrast, muted colors, "
+    "slight lens smudge, wide angle distortion, cluttered cafe background"
+)
+
+# V7 整合版：閃光燈健身房自拍
+REALISM_V7_FLASH_GYM = (
+    f"{LDR_REALISM_CORE}, {FLASH_MODE}, {BASE_IMPERFECTIONS}, "
     "dripping sweat, glistening skin after workout, drenched in perspiration, "
     "beads of sweat on forehead and collarbone, skin flushed and red from exercise, "
-    "visible specular highlights from sweat droplets, "
     "clumped wet hair, sweaty matted hair sticking to neck, messy strands plastered to forehead, "
     "harsh overhead fluorescent lighting, blown-out highlights on sweaty skin, "
-    "harsh uneven lighting, strong shadows, blocked shadows, crushed blacks, "
     "mouth slightly open panting, eyes looking at something off-camera, "
     "small mole on cheek, uneven skin pigmentation, minor acne scar, "
     "wearing cheap oxidized necklace, simple ring, "
     "wrinkled clothes with sweat stains, fabric creases, "
-    "messy cluttered background, background details visible, not overly blurred, "
     "workout equipment in background, water bottles, towels, gym clutter, "
     "bad gym lighting, unstaged, accidental selfie, candid moment"
+)
+
+# V7 整合版：平淡日常模式
+REALISM_V7_CASUAL = (
+    f"{LDR_REALISM_CORE}, {CASUAL_MODE}, {BASE_IMPERFECTIONS}, "
+    "candid moment, looking at something off-camera, natural expression, "
+    "small mole on cheek, uneven skin pigmentation, "
+    "wearing simple everyday clothes, fabric wrinkles, "
+    "cafe interior or street background, everyday life scene"
 )
 
 NEGATIVE_PROMPT = (
@@ -41,7 +76,8 @@ NEGATIVE_PROMPT = (
     "cartoon, painting, render, 3d, artificial, fake, doll-like, "
     "perfect symmetry, overly saturated, studio lighting, "
     "professional headshot style, perfect skin, immaculate, "
-    "oversharpened, HDR overprocessed, commercial photography look"
+    "oversharpened, HDR overprocessed, commercial photography look, "
+    "professional photography, DSLR, perfect focus, clean background"
 )
 
 
@@ -78,8 +114,8 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     """測試 flux-schnell（現用基準）"""
     start_time = time.time()
     
-    # 加入真實人格側寫優化 suffix
-    optimized_prompt = f"{prompt}, {REALISM_V6_RAW_LIFE}"
+    # 加入 V7 閃光燈健身房真實感 suffix
+    optimized_prompt = f"{prompt}, {REALISM_V7_FLASH_GYM}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -136,11 +172,11 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
 
 
 async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
-    """測試 flux-dev-realism (V6真實人格側寫：汗水+手機畸變+雜亂背景)"""
+    """測試 flux-dev-realism (V7：LDR低動態範圍+物理缺陷+閃光燈模式)"""
     start_time = time.time()
     
-    # 加入真實人格側寫 (V6: 汗水物理+廣角畸變+生活雜亂感)
-    optimized_prompt = f"{prompt}, {REALISM_V6_RAW_LIFE}"
+    # 加入 V7 LDR 真實感：物理缺陷+閃光燈健身房場景
+    optimized_prompt = f"{prompt}, {REALISM_V7_FLASH_GYM}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -197,11 +233,11 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
 
 
 async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
-    """測試 flux-cinestill"""
+    """測試 flux-cinestill（V7 LDR 版本）"""
     start_time = time.time()
     
-    # 加入 CNSTLL trigger word + 真實人格側寫
-    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V6_RAW_LIFE}"
+    # 加入 CNSTLL trigger word + V7 真實感
+    cinestill_prompt = f"CNSTLL, {prompt}, {REALISM_V7_FLASH_GYM}"
     
     headers = {
         "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
@@ -330,18 +366,23 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
 @router.post("/model-comparison", response_model=List[ModelResult])
 async def model_comparison(req: ModelComparisonRequest):
     """
-    POC endpoint: 測試 flux-dev-realism (2026光學缺陷優化版)
+    POC endpoint: 測試 flux-dev-realism V7
+    
+    V7 更新：LDR 低動態範圍邏輯 + 物理缺陷三大面向
+    - 畫質：JPEG 壓縮痕跡、數位雜訊
+    - 動態範圍：blown-out highlights（死白）+ crushed shadows（死黑）
+    - 色彩：閃光燈藍調 / 室內黃綠偏色
     """
     if not REPLICATE_API_TOKEN:
         raise HTTPException(status_code=500, detail="REPLICATE_API_TOKEN not configured")
     
-    logger.info(f"Starting realism test with prompt: {req.prompt[:50]}...")
+    logger.info(f"Starting V7 LDR realism test with prompt: {req.prompt[:50]}...")
     
     # 單一模型測試
     results = []
     
-    # flux-dev-realism (CFG 2.8 + 光學缺陷優化)
-    logger.info("Testing flux-dev-realism with optical imperfections...")
+    # flux-dev-realism (V7: LDR + 物理缺陷)
+    logger.info("Testing flux-dev-realism V7 (LDR + physical imperfections)...")
     results.append(await test_flux_realism(req.prompt, req.seed))
     
     return results

@@ -44,10 +44,32 @@ IG_ME_URL = "https://graph.instagram.com/me"
 OAUTH_SCOPE = "instagram_business_basic,instagram_business_content_publish"
 
 # ---------------------------------------------------------------------------
-# In-memory stores  (replace with DB for production)
+# Token store — in-memory + JSON 持久化
 # ---------------------------------------------------------------------------
+import json
+from pathlib import Path
+
+_TOKEN_FILE = Path(__file__).parent.parent.parent / "data" / "instagram_tokens.json"
+
+def _load_token_store() -> dict:
+    """從 JSON 檔案讀取 token store（backend 重啟後恢復）"""
+    if _TOKEN_FILE.exists():
+        try:
+            return json.loads(_TOKEN_FILE.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning(f"Failed to load token store: {e}")
+    return {}
+
+def _save_token_store() -> None:
+    """把 token store 寫回 JSON 檔案"""
+    try:
+        _TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _TOKEN_FILE.write_text(json.dumps(_token_store, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to save token store: {e}")
+
 # { persona_id: { "access_token": str, "ig_account_id": str, "ig_username": str, "expires_at": str } }
-_token_store: dict[str, dict] = {}
+_token_store: dict[str, dict] = _load_token_store()
 
 # ---------------------------------------------------------------------------
 # Pre-seed token store from environment (MVP shortcut - bypass OAuth)
@@ -176,6 +198,7 @@ def refresh_instagram_token(persona_id: str = "default") -> None:
                     else:
                         f.write(line)
             logger.info("Updated INSTAGRAM_ACCESS_TOKEN in .env")
+        _save_token_store()
 
         logger.info("Token refreshed successfully for persona_id=%s", persona_id)
         _send_telegram(
@@ -395,6 +418,47 @@ def disconnect_persona(persona_id: str) -> bool:
     return False
 
 
+def connect_with_access_token(
+    persona_id: str,
+    access_token: str,
+    ig_user_id: Optional[str] = None,
+    ig_username: Optional[str] = None,
+) -> dict:
+    """
+    Directly connect an IG account using a long-lived access token (bypass OAuth).
+    Validates the token by fetching user info from /me if not provided.
+    Uses ig_user_id as the actual persona_id for storage.
+    Stores the token and returns connection info.
+    """
+    # If ig_user_id not provided, fetch from API
+    if not ig_user_id or not ig_username:
+        fetched_id, fetched_username = get_instagram_account_id(access_token)
+        ig_user_id = ig_user_id or fetched_id
+        ig_username = ig_username or fetched_username
+    
+    # Use ig_user_id as the actual persona_id (one IG account = one persona)
+    actual_persona_id = ig_user_id
+    
+    # Store token with ig_user_id as key
+    _token_store[actual_persona_id] = {
+        "access_token": access_token,
+        "ig_account_id": ig_user_id,
+        "ig_username": ig_username,
+        "expires_in": 5183944,  # ~60 days default for long-lived tokens
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+    }
+    
+    # Register token refresh job
+    _schedule_token_refresh_jobs()
+
+    # 持久化到 JSON（重啟後恢復）
+    _save_token_store()
+
+    logger.info("Token manually connected for persona_id=%s ig_account_id=%s username=%s",
+                actual_persona_id, ig_user_id, ig_username)
+    return _token_store[actual_persona_id]
+
+
 def get_connection_status(persona_id: str) -> dict:
     """Return the stored token info for a persona, or indicate not connected."""
     info = _token_store.get(persona_id)
@@ -422,15 +486,15 @@ def _require_token(persona_id: str) -> dict:
 def _ensure_jpeg_url(image_url: str) -> str:
     """
     Instagram Graph API 只接受 JPEG/PNG。
-    若圖片是 WebP，下載後轉換成 JPEG 並回傳 data URI（僅作 debug）。
-    實際上需上傳到公開 CDN；這裡先嘗試通過 requests 取 content-type 判斷。
+    若圖片是 WebP，下載後轉換成 JPEG 並上傳至 tmpfiles.org（免費公開 CDN）。
     """
     import io
+    import base64
     try:
         head = requests.head(image_url, timeout=10, allow_redirects=True)
         content_type = head.headers.get("Content-Type", "")
         if "webp" in content_type or image_url.lower().endswith(".webp"):
-            logger.warning("WebP detected (%s), attempting JPEG conversion", image_url)
+            logger.warning("WebP detected (%s), converting to JPEG...", image_url)
             img_resp = requests.get(image_url, timeout=30)
             img_resp.raise_for_status()
             try:
@@ -439,17 +503,36 @@ def _ensure_jpeg_url(image_url: str) -> str:
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG", quality=92)
                 buf.seek(0)
-                # TODO: upload buf to CDN and return CDN URL
-                # For now, raise with a clear message
-                raise RuntimeError(
-                    f"圖片為 WebP 格式，Instagram 不支援。"
-                    f"請將 Replicate 輸出格式改為 JPEG/PNG，或上傳至公開 CDN 後再發布。"
-                    f"原始 URL: {image_url}"
-                )
+                
+                # 上傳至 tmpfiles.org（免費 24 小時暫存）
+                try:
+                    upload_resp = requests.post(
+                        "https://tmpfiles.org/api/v1/upload",
+                        files={"file": ("image.jpg", buf, "image/jpeg")},
+                        timeout=30
+                    )
+                    upload_resp.raise_for_status()
+                    upload_data = upload_resp.json()
+                    if upload_data.get("status") == "success":
+                        # tmpfiles.org 返回格式：https://tmpfiles.org/12345
+                        # 需改為 dl 連結：https://tmpfiles.org/dl/12345
+                        tmp_url = upload_data["data"]["url"]
+                        cdn_url = tmp_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                        logger.info("Converted WebP to JPEG and uploaded to CDN: %s", cdn_url)
+                        return cdn_url
+                except Exception as upload_err:
+                    logger.error("Failed to upload to tmpfiles.org: %s", upload_err)
+                    # Fallback: 返回 base64 data URL（可能太大但至少能用）
+                    buf.seek(0)
+                    b64 = base64.b64encode(buf.read()).decode('utf-8')
+                    data_url = f"data:image/jpeg;base64,{b64}"
+                    logger.warning("Using base64 data URL as fallback (size: %d chars)", len(data_url))
+                    return data_url
+                    
             except ImportError:
                 raise RuntimeError(
                     f"圖片為 WebP 格式（Instagram 不支援），且無法轉換（缺少 Pillow）。"
-                    f"請將 Replicate 輸出改為 JPEG 格式。URL: {image_url}"
+                    f"請安裝 Pillow: pip install Pillow"
                 )
     except RuntimeError:
         raise

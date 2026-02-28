@@ -1,45 +1,51 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Optional
 from app.services import comfyui_service
+from app.services.ai_detector_service import detect_ai_image
 
 router = APIRouter()
 
+
 class GenerateRequest(BaseModel):
     prompt: str
-    negative_prompt: str = "ugly, blurry, low quality, deformed"
-    seed: int = -1
-    width: int = 1024
-    height: int = 1024
+    seed: int = 42
+    face_image_url: str = ""
+    camera_style: str = "lifestyle"
 
-class RegenerateRequest(BaseModel):
-    original_prompt: str
-    instruction: str = ""
-    seed: int = -1
 
-@router.get("/health")
-async def comfyui_health():
-    """檢查 ComfyUI 連線狀態"""
-    ok = await comfyui_service.health_check()
-    return {"comfyui_available": ok, "mock_mode": comfyui_service.MOCK_MODE}
+class RetestRequest(BaseModel):
+    """T5: 回測 — 生圖 + 立即跑 Hive 檢測，回傳圖片 URL 與 AI 分數"""
+    prompt: str
+    seed: int = 42
+    face_image_url: str = ""
+    camera_style: str = "lifestyle"
+
 
 @router.post("/generate")
 async def generate(req: GenerateRequest):
-    """T5: 生成圖片"""
-    result = await comfyui_service.generate_image(
+    """生成圖片（Mode A: kontext-max，Mode B: flux-dev-realism）"""
+    image_url = await comfyui_service.generate_image(
         prompt=req.prompt,
-        negative_prompt=req.negative_prompt,
         seed=req.seed,
-        width=req.width,
-        height=req.height,
+        face_image_url=req.face_image_url,
+        camera_style=req.camera_style,
     )
-    return result
+    return {"image_url": image_url}
 
-@router.post("/regenerate")
-async def regenerate(req: RegenerateRequest):
-    """T8: 一鍵重繪（附加指令）"""
-    enhanced_prompt = f"{req.original_prompt}, {req.instruction}" if req.instruction else req.original_prompt
-    result = await comfyui_service.generate_image(
-        prompt=enhanced_prompt,
+
+@router.post("/retest")
+async def retest(req: RetestRequest):
+    """T5: 回測 endpoint — 生圖 + Hive AI 分數"""
+    image_url = await comfyui_service.generate_image(
+        prompt=req.prompt,
         seed=req.seed,
+        face_image_url=req.face_image_url,
+        camera_style=req.camera_style,
     )
-    return result
+    hive_score = await detect_ai_image(image_url) if image_url else -1.0
+    return {
+        "image_url": image_url,
+        "hive_score": hive_score,
+        "pass": hive_score != -1.0 and hive_score < 0.3,
+    }

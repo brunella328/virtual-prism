@@ -57,13 +57,15 @@ export default function ModelComparisonPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            🔬 Flux Realism POC (V6真實人格側寫版)
+            🔬 Flux Realism POC (V7 LDR物理缺陷版)
           </h1>
           <p className="text-gray-600 mb-1">
-            flux-dev-realism + 真實人格側寫（汗水物理+手機畸變+雜亂背景）
+            flux-dev-realism V7：低動態範圍 (LDR) + 物理缺陷三大面向
           </p>
           <p className="text-sm text-gray-500">
-            CFG 2.5 | Steps 28 | 汗水閃爍+廣角畸變+生活垃圾感 | 從「電影劇照」→「真實側寫」
+            ✨ 新增：JPEG壓縮痕跡 | 死白高光+死黑陰影 | 閃光燈藍調/室內黃綠偏色
+            <br />
+            CFG 2.5 | Steps 28 | 從「完美AI圖」→「真實手機照片」
           </p>
         </div>
 
@@ -71,7 +73,7 @@ export default function ModelComparisonPage() {
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              測試場景（V6真實人格側寫版）
+              測試場景（V7 LDR物理缺陷版）
             </label>
             <div className="flex gap-3 mb-4 flex-wrap">
               <button
@@ -82,7 +84,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                💪 健身房（汗水+畸變）⭐
+                💪 健身房（閃光燈模式）⭐
               </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.portrait)}
@@ -92,7 +94,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                ☕ 咖啡廳（雜亂背景）
+                ☕ 咖啡廳（平淡日常模式）
               </button>
               <button
                 onClick={() => setPrompt(PRESET_PROMPTS.extreme)}
@@ -102,7 +104,7 @@ export default function ModelComparisonPage() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                🍜 極限測試（濕氣+畸變）
+                🍜 極限測試（LDR+壓縮）
               </button>
             </div>
             <textarea
@@ -185,10 +187,10 @@ export default function ModelComparisonPage() {
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent"></div>
             <p className="mt-4 text-gray-600">
-              正在生成圖片（真實人格側寫中）...
+              正在生成圖片（LDR 物理缺陷注入中）...
               <br />
               <span className="text-sm text-gray-500">
-                (flux-dev-realism | CFG 2.5 | Steps 28 | 汗水物理+畸變+雜亂背景 | 預計 30-40 秒)
+                (flux-dev-realism V7 | LDR | 壓縮痕跡+死白死黑+色偏 | 預計 30-40 秒)
               </span>
             </p>
           </div>

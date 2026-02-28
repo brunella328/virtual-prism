@@ -1,0 +1,34 @@
+{
+  "test_time": "20260227_162941",
+  "total": 4,
+  "valid_hive": 0,
+  "passed": 0,
+  "pass_rate_pct": 0,
+  "ac_met": false,
+  "results": [
+    {
+      "name": "cafe_no_face",
+      "image_url": "https://replicate.delivery/yhqm/8YbVbqMrHbJ4EJuXveyefqIT8GA8DuhxGa6TelQlHKsNACvYB/R8_FLUX_DEV_REALISM_00001_.jpg",
+      "hive_score": -1.0,
+      "pass": false
+    },
+    {
+      "name": "cafe_with_face",
+      "image_url": "https://replicate.delivery/xezq/ErMGlfO8keq790BG8FwEJtllQTtDyHDND22kPfrgpiMwAhXsA/tmpxsu36t6t.jpg",
+      "hive_score": -1.0,
+      "pass": false
+    },
+    {
+      "name": "street_with_face",
+      "image_url": "https://replicate.delivery/xezq/lz3sdGJk135POFTkpRcjQZeWezrSbiE1gPTdeoywRb1bBhXsA/tmpu4inka4e.jpg",
+      "hive_score": -1.0,
+      "pass": false
+    },
+    {
+      "name": "office_with_face",
+      "image_url": "https://replicate.delivery/xezq/Yj51RkKOF7qVPpBpuaSUaW5klPgNyKldke02q3k0OghhQ4FLA/tmpagsdtwpl.jpg",
+      "hive_score": -1.0,
+      "pass": false
+    }
+  ]
+}

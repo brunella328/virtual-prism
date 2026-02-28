@@ -1,0 +1,24 @@
+{
+  "test_time": "20260227_161103",
+  "model": "flux-kontext-max",
+  "strategy": "input_image=reference_face",
+  "reference_face": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800",
+  "seed": 42,
+  "results": [
+    {
+      "scene": "cafe",
+      "image_url": "https://replicate.delivery/xezq/1FAZ17Rn9IL0IdoZRZKDlqeu1OLHt7sF5eiZ3TmvInDhOwLWA/tmp8w0_hf8n.jpg",
+      "success": true
+    },
+    {
+      "scene": "street",
+      "image_url": "https://replicate.delivery/xezq/yKfpJgTwZL12B6ukgXZZWJ0scCwnRbfCDRYeXD8Gt68sdgXsA/tmplfgbde48.jpg",
+      "success": true
+    },
+    {
+      "scene": "office",
+      "image_url": "https://replicate.delivery/xezq/PlSifyO4xYX3QSMatp6SHfrk8DfGm5KI4tswTQK7CpQWeAvYB/tmp_625s4sa.jpg",
+      "success": true
+    }
+  ]
+}

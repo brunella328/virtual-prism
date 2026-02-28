@@ -111,6 +111,43 @@ class ExchangeRequest(BaseModel):
     redirect_uri: str
 
 
+class ConnectTokenRequest(BaseModel):
+    """Request to connect IG account using a direct access token (bypass OAuth)."""
+    persona_id: str
+    access_token: str
+    ig_user_id: Optional[str] = None  # optional; will be fetched from /me if omitted
+    ig_username: Optional[str] = None  # optional; will be fetched from /me if omitted
+
+
+@router.post("/connect-token")
+async def connect_with_token(req: ConnectTokenRequest):
+    """
+    Directly connect an Instagram account using a long-lived access token.
+    Bypasses OAuth — useful for manual token entry or advanced users.
+    
+    Validates the token by calling /me and stores it in the token store.
+    Uses ig_user_id as the actual persona_id.
+    """
+    try:
+        info = svc.connect_with_access_token(
+            persona_id=req.persona_id,
+            access_token=req.access_token,
+            ig_user_id=req.ig_user_id,
+            ig_username=req.ig_username,
+        )
+        # Return ig_account_id as the actual persona_id to use
+        return {
+            "success": True,
+            "persona_id": info["ig_account_id"],  # This is the actual persona_id used
+            "ig_account_id": info["ig_account_id"],
+            "ig_username": info["ig_username"],
+            "connected_at": info["connected_at"],
+        }
+    except Exception as e:
+        logger.exception("connect-token failed")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/exchange")
 async def exchange_code(req: ExchangeRequest):
     """
