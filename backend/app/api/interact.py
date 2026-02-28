@@ -9,7 +9,11 @@ Endpoints:
   POST     /settings/{persona_id}
 """
 
+import hashlib
+import hmac
+import json
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -27,7 +31,7 @@ router = APIRouter()
 # Webhook — GET (hub verification) & POST (events)
 # ---------------------------------------------------------------------------
 
-WEBHOOK_VERIFY_TOKEN = "virtual_prism_webhook_token"
+WEBHOOK_VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "")
 
 
 @router.get("/webhook/instagram")
@@ -51,8 +55,20 @@ async def instagram_webhook(request: Request):
     Receive IG Webhook events (POST).
     Parses entry[].changes[] for comment events, generates drafts.
     """
+    raw_body = await request.body()
+
+    # Verify X-Hub-Signature-256 when APP_SECRET is configured
+    app_secret = os.getenv("INSTAGRAM_APP_SECRET", "")
+    if app_secret:
+        sig_header = request.headers.get("X-Hub-Signature-256", "")
+        expected_sig = "sha256=" + hmac.new(
+            app_secret.encode(), raw_body, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig_header, expected_sig):
+            raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
     try:
-        payload: dict[str, Any] = await request.json()
+        payload: dict[str, Any] = json.loads(raw_body)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 

@@ -262,11 +262,6 @@ def exchange_code_for_token(code: str, state: str) -> dict:
         raise ValueError("INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET not configured")
 
     # 1. Short-lived token (Instagram token endpoint)
-    print(f"[DEBUG] token exchange → URL: {IG_TOKEN_URL}", flush=True)
-    print(f"[DEBUG] client_id={INSTAGRAM_APP_ID}", flush=True)
-    print(f"[DEBUG] redirect_uri={REDIRECT_URI}", flush=True)
-    print(f"[DEBUG] code={code[:30]}...", flush=True)
-
     resp = requests.post(IG_TOKEN_URL, data={
         "client_id": INSTAGRAM_APP_ID,
         "client_secret": INSTAGRAM_APP_SECRET,

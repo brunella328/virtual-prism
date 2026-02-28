@@ -1,7 +1,9 @@
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import genesis, life_stream, interact, image, instagram, fans, poc
 from app.services.instagram_service import get_scheduler, start_scheduler
@@ -24,6 +26,24 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+_PUBLIC_PATHS = {
+    "/health",
+    "/api/instagram/auth",
+    "/api/instagram/callback",
+    "/api/interact/webhook/instagram",
+}
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    if request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
+        return await call_next(request)
+    expected = os.getenv("API_SECRET_KEY", "")
+    if expected and request.headers.get("X-Api-Key", "") != expected:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+    return await call_next(request)
+
 
 app.add_middleware(
     CORSMiddleware,
