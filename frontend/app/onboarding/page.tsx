@@ -99,8 +99,15 @@ export default function OnboardingPage() {
         <h2 className="text-lg font-semibold">連結 Instagram 帳號</h2>
         <p className="text-sm text-gray-500">點擊下方按鈕，透過 Instagram 官方授權流程登入</p>
         <button
-          onClick={() => {
-            window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/instagram/auth?persona_id=temp`
+          onClick={async () => {
+            try {
+              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/instagram/auth?persona_id=temp`)
+              const data = await res.json()
+              if (data.auth_url) window.location.href = data.auth_url
+              else alert('無法取得授權連結，請確認後端設定')
+            } catch {
+              alert('連線失敗，請確認後端是否運行中')
+            }
           }}
           className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:opacity-90 font-medium flex items-center justify-center gap-2"
         >
