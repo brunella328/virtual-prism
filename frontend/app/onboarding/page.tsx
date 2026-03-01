@@ -94,28 +94,46 @@ export default function OnboardingPage() {
       <h1 className="text-3xl font-bold mb-2">Virtual Prism 🌈</h1>
       <p className="text-gray-500 mb-8 text-center">連結你的 Instagram 帳號，開始創建 AI 網紅</p>
 
-      <div className="w-full p-6 border-2 border-gray-200 rounded-2xl bg-white space-y-4">
+      {/* OAuth 登入按鈕 */}
+      <div className="w-full p-6 border-2 border-black rounded-2xl bg-white space-y-3">
         <h2 className="text-lg font-semibold">連結 Instagram 帳號</h2>
-        <p className="text-sm text-gray-500">請輸入從 Meta Graph API Explorer 取得的 Access Token</p>
-        <textarea
-          value={tokenInput}
-          onChange={e => setTokenInput(e.target.value)}
-          placeholder="貼上 Access Token (IGAA... 或 EAA...)"
-          className="w-full border border-gray-300 rounded-lg px-3 py-3 text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-black"
-          rows={4}
-        />
-        {tokenError && <p className="text-red-500 text-sm">{tokenError}</p>}
+        <p className="text-sm text-gray-500">點擊下方按鈕，透過 Instagram 官方授權流程登入</p>
         <button
-          onClick={handleConnectToken}
-          disabled={tokenLoading || !tokenInput.trim()}
-          className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:opacity-90 disabled:opacity-50 font-medium"
+          onClick={() => {
+            window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/instagram/auth?persona_id=temp`
+          }}
+          className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:opacity-90 font-medium flex items-center justify-center gap-2"
         >
-          {tokenLoading ? '驗證中...' : '連結 Instagram 帳號 →'}
+          <span>📷</span> 用 Instagram 帳號登入
         </button>
       </div>
-      <p className="text-xs text-gray-400 mt-4 text-center">
-        💡 請使用長效 Access Token（60 天有效期），系統會自動刷新
-      </p>
+
+      {/* Token 手動輸入（進階） */}
+      <details className="w-full mt-3">
+        <summary className="text-xs text-gray-400 cursor-pointer text-center select-none">
+          進階：手動輸入 Access Token
+        </summary>
+        <div className="w-full p-4 border border-gray-200 rounded-2xl bg-white space-y-3 mt-2">
+          <textarea
+            value={tokenInput}
+            onChange={e => setTokenInput(e.target.value)}
+            placeholder="貼上 Access Token (IGAA... 或 EAA...)"
+            className="w-full border border-gray-300 rounded-lg px-3 py-3 text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-black"
+            rows={4}
+          />
+          {tokenError && <p className="text-red-500 text-sm">{tokenError}</p>}
+          <button
+            onClick={handleConnectToken}
+            disabled={tokenLoading || !tokenInput.trim()}
+            className="w-full py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 font-medium text-sm"
+          >
+            {tokenLoading ? '驗證中...' : '以 Token 連結'}
+          </button>
+          <p className="text-xs text-gray-400 text-center">
+            💡 請使用長效 Access Token（60 天有效期），系統會自動刷新
+          </p>
+        </div>
+      </details>
     </main>
   )
 
