@@ -41,7 +41,7 @@ IG_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 IG_LONG_LIVED_URL = "https://graph.instagram.com/access_token"
 IG_ME_URL = "https://graph.instagram.com/me"
 
-OAUTH_SCOPE = "instagram_business_basic,instagram_business_content_publish"
+OAUTH_SCOPE = "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_messages"
 
 # ---------------------------------------------------------------------------
 # Token store — in-memory + JSON 持久化
