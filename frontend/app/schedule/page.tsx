@@ -9,19 +9,20 @@ import { getScheduledPosts, cancelScheduledPost } from '@/lib/api'
 
 export default function SchedulePage() {
   const router = useRouter()
-  const { userId, isAuthenticated } = useUser()
+  const { userId, isAuthenticated, isLoading } = useUser()
   const { toasts, addToast, removeToast } = useToast()
   const [jobs, setJobs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (isLoading) return
     if (!isAuthenticated) { router.replace('/onboarding'); return }
 
     getScheduledPosts(userId!)
       .then(data => setJobs(data.scheduled_posts || []))
       .catch(() => addToast('載入排程失敗', 'error'))
       .finally(() => setLoading(false))
-  }, [isAuthenticated, userId, router])
+  }, [isAuthenticated, isLoading, userId, router])
 
   const handleCancel = async (jobId: string) => {
     try {

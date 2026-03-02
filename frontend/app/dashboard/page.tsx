@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { userId, isAuthenticated, appearancePrompt } = useUser()
+  const { userId, isAuthenticated, isLoading, appearancePrompt } = useUser()
   const { toasts, addToast, removeToast } = useToast()
 
   // Schedule state
@@ -63,11 +63,12 @@ export default function DashboardPage() {
 
   // Auth guard + IG status
   useEffect(() => {
+    if (isLoading) return
     if (!isAuthenticated) { router.replace('/onboarding'); return }
     getInstagramStatus(userId!)
       .then(s => setIgConnected(!!s.connected))
       .catch(() => setIgConnected(false))
-  }, [isAuthenticated, userId, router])
+  }, [isAuthenticated, isLoading, userId, router])
 
   // Load schedule — if empty, generate today's post only
   useEffect(() => {

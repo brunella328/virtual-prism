@@ -23,6 +23,8 @@ interface UserState {
 export interface UserContextType extends UserState {
   /** 是否已登入（userId 非 null） */
   isAuthenticated: boolean
+  /** localStorage 尚未讀完時為 true，等到 false 再做 auth 判斷 */
+  isLoading: boolean
   /**
    * 連結 IG 帳號後呼叫，同時更新 React state 與 localStorage。
    * userId = IG account ID（同時也是 persona ID）
@@ -47,6 +49,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     igUsername: null,
     appearancePrompt: '',
   })
+  const [isLoading, setIsLoading] = useState(true)
 
   // Load from localStorage only after hydration (client only)
   useEffect(() => {
@@ -55,6 +58,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       igUsername: storage.getIgUsername(),
       appearancePrompt: storage.getAppearancePrompt(),
     })
+    setIsLoading(false)
   }, [])
 
   const connect = useCallback((
@@ -82,6 +86,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     <UserContext.Provider value={{
       ...state,
       isAuthenticated: !!state.userId,
+      isLoading,
       connect,
       logout,
       setAppearancePrompt,
