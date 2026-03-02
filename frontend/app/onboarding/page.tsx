@@ -229,7 +229,7 @@ export default function OnboardingPage() {
     return (
       <main className="min-h-screen p-8 max-w-2xl mx-auto">
         <h2 className="text-2xl font-bold mb-2">✨ 人設草稿生成完成</h2>
-        <p className="text-sm text-gray-400 mb-6">描述：「{description}」</p>
+        {description && <p className="text-sm text-gray-400 mb-6">描述：「{description}」</p>}
 
         {previews.length > 0 && (
           <div className="flex gap-2 mb-5">
