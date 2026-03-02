@@ -262,6 +262,12 @@ export default function DashboardPage() {
         storage.setSchedule(updated)
         return updated
       })
+      // 同步後端 status
+      fetch(`${API}/api/life-stream/schedule/${userId}/${day}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'scheduled' }),
+      }).catch(() => {})
     } catch (e) {
       addToast(`排程失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
