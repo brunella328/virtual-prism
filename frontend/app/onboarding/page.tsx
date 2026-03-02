@@ -25,6 +25,7 @@ interface PersonaResult {
     speech_pattern: string
     values: string[]
     weekly_lifestyle: string
+    reference_face_url?: string
   }
 }
 
@@ -63,6 +64,9 @@ export default function OnboardingPage() {
         if (data) {
           setPersona({ persona_id: data.persona_id, persona: data.persona })
           setEditedPersona(data.persona)
+          if (data.persona.reference_face_url) {
+            setPreviews([data.persona.reference_face_url])
+          }
           if (data.persona.appearance) {
             setAppearanceData(data.persona.appearance)
           }
