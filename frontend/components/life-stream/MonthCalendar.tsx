@@ -14,7 +14,7 @@ export interface DayContent {
   image_url?: string
   image_prompt?: string
   seed: number
-  status: 'draft' | 'approved' | 'published' | 'rejected' | 'regenerating'
+  status: 'draft' | 'approved' | 'published' | 'rejected' | 'regenerating' | 'scheduled'
   hashtags?: string[]
   scheduledAt?: string
 }
@@ -35,6 +35,7 @@ const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const STATUS_DOT: Record<string, string> = {
   draft: 'bg-gray-400',
   approved: 'bg-green-500',
+  scheduled: 'bg-green-500',
   published: 'bg-blue-500',
   rejected: 'bg-red-400',
   regenerating: 'bg-yellow-400',

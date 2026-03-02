@@ -21,7 +21,7 @@ const STATUS_BADGE: Record<string, string> = {
 }
 const STATUS_LABEL: Record<string, string> = {
   draft: '草稿', approved: '已核准', published: '已發布',
-  rejected: '需重繪', regenerating: '重繪中',
+  rejected: '需重繪', regenerating: '重繪中', scheduled: '已排程',
 }
 
 export default function DashboardPage() {
@@ -257,7 +257,11 @@ export default function DashboardPage() {
         publish_at: new Date(publishAt).toISOString(),
       }])
       addToast(`已排程 ✓ ${new Date(publishAt).toLocaleString('zh-TW')}`, 'success')
-      setSchedule(prev => prev.map(s => s.day === day ? { ...s, scheduledAt: publishAt } : s))
+      setSchedule(prev => {
+        const updated = prev.map(s => s.day === day ? { ...s, scheduledAt: publishAt, status: 'scheduled' as const } : s)
+        storage.setSchedule(updated)
+        return updated
+      })
     } catch (e) {
       addToast(`排程失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
