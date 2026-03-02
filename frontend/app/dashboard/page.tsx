@@ -288,7 +288,7 @@ export default function DashboardPage() {
                 setSelectedPost(post)
                 setEditMode(false)
                 setConfirmPublish(false)
-                setScheduleTime('')
+                setScheduleTime(post.date ? `${post.date}T09:00` : '')
                 setRegenInstruction('')
               }}
             />
