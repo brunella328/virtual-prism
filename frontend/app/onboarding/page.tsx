@@ -49,6 +49,8 @@ export default function OnboardingPage() {
   // Step 3/4 — 結果
   const [appearanceData, setAppearanceData] = useState<AppearanceData | null>(null)
   const [persona, setPersona] = useState<PersonaResult | null>(null)
+  const [editedPersona, setEditedPersona] = useState<PersonaResult['persona'] | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   // 頁面載入：依 context 決定起始 step
   useEffect(() => {
@@ -60,6 +62,7 @@ export default function OnboardingPage() {
       .then(data => {
         if (data) {
           setPersona({ persona_id: data.persona_id, persona: data.persona })
+          setEditedPersona(data.persona)
           if (data.persona.appearance) {
             setAppearanceData(data.persona.appearance)
           }
@@ -174,6 +177,7 @@ export default function OnboardingPage() {
       if (!personaRes.ok) throw new Error(`Persona API error: ${personaRes.status}`)
       const personaResult: PersonaResult = await personaRes.json()
       setPersona(personaResult)
+      setEditedPersona(personaResult.persona)
 
       // 透過 context 同步 appearance prompt（storage 同步已在 context 內完成）
       if (localAppearance?.image_prompt) {
@@ -196,72 +200,151 @@ export default function OnboardingPage() {
     </main>
   )
 
-  // ── Step 4：人設卡 ───────────────────────────────────────────────────────
-  if (step === 'done' && persona) return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-2">✨ 人設草稿生成完成</h2>
-      <p className="text-sm text-gray-400 mb-6">描述：「{description}」</p>
+  // ── Step 4：人設卡（可編輯）──────────────────────────────────────────────
+  if (step === 'done' && persona && editedPersona) {
+    const handleSavePersona = async () => {
+      if (!userId) return
+      setIsSaving(true)
+      try {
+        const res = await fetch(`${API}/api/genesis/persona/${userId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editedPersona),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        setPersona({ persona_id: data.persona_id, persona: data.persona })
+        alert('人設已儲存 ✓')
+      } catch (e) {
+        alert(`儲存失敗：${e instanceof Error ? e.message : String(e)}`)
+      } finally {
+        setIsSaving(false)
+      }
+    }
 
-      {previews.length > 0 && (
-        <div className="flex gap-2 mb-5">
-          {previews.map((src, i) => (
-            <img key={i} src={src} alt="" className="h-20 w-20 object-cover rounded-xl border" />
-          ))}
-        </div>
-      )}
+    return (
+      <main className="min-h-screen p-8 max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold mb-2">✨ 人設草稿生成完成</h2>
+        <p className="text-sm text-gray-400 mb-6">描述：「{description}」</p>
 
-      <div className="bg-gray-50 rounded-xl p-6 space-y-3 mb-4">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">人設資訊</h3>
-        <div><span className="font-medium">姓名：</span>{persona.persona.name}</div>
-        <div><span className="font-medium">職業：</span>{persona.persona.occupation}</div>
-        <div><span className="font-medium">個性標籤：</span><span className="text-gray-700">{persona.persona.personality_tags.join('、')}</span></div>
-        <div><span className="font-medium">口癖：</span>{persona.persona.speech_pattern}</div>
-        <div><span className="font-medium">核心價值：</span><span className="text-gray-700">{persona.persona.values?.join('、')}</span></div>
-        <div><span className="font-medium">生活風格：</span>{persona.persona.weekly_lifestyle}</div>
-      </div>
-
-      {appearanceData && (
-        <div className="bg-blue-50 rounded-xl p-6 space-y-2 mb-4">
-          <h3 className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-3">外觀分析</h3>
-          <div className="grid grid-cols-1 gap-2 text-sm">
-            <div><span className="font-medium text-blue-700">臉部特徵：</span><span className="text-gray-700">{appearanceData.facial_features}</span></div>
-            <div><span className="font-medium text-blue-700">膚色：</span><span className="text-gray-700">{appearanceData.skin_tone}</span></div>
-            <div><span className="font-medium text-blue-700">髮型髮色：</span><span className="text-gray-700">{appearanceData.hair}</span></div>
-            <div><span className="font-medium text-blue-700">體型：</span><span className="text-gray-700">{appearanceData.body}</span></div>
-            <div><span className="font-medium text-blue-700">穿搭風格：</span><span className="text-gray-700">{appearanceData.style}</span></div>
+        {previews.length > 0 && (
+          <div className="flex gap-2 mb-5">
+            {previews.map((src, i) => (
+              <img key={i} src={src} alt="" className="h-20 w-20 object-cover rounded-xl border" />
+            ))}
           </div>
-          <div className="mt-3 pt-3 border-t border-blue-100">
-            <p className="text-xs font-medium text-blue-600 mb-1">生圖 Prompt</p>
-            <p className="text-xs text-gray-500 leading-relaxed">{appearanceData.image_prompt}</p>
-          </div>
-        </div>
-      )}
+        )}
 
-      <div className="flex gap-3 mt-2">
+        <div className="bg-gray-50 rounded-xl p-6 space-y-3 mb-4">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">人設資訊（可直接編輯）</h3>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm w-20 shrink-0">姓名</span>
+            <input
+              value={editedPersona.name}
+              onChange={e => setEditedPersona({ ...editedPersona, name: e.target.value })}
+              className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm w-20 shrink-0">職業</span>
+            <input
+              value={editedPersona.occupation}
+              onChange={e => setEditedPersona({ ...editedPersona, occupation: e.target.value })}
+              className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm w-20 shrink-0">個性標籤</span>
+            <input
+              value={editedPersona.personality_tags.join(', ')}
+              onChange={e => setEditedPersona({
+                ...editedPersona,
+                personality_tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+              })}
+              placeholder="以逗號分隔，例：活潑, 熱情"
+              className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm w-20 shrink-0">口癖</span>
+            <input
+              value={editedPersona.speech_pattern}
+              onChange={e => setEditedPersona({ ...editedPersona, speech_pattern: e.target.value })}
+              className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm w-20 shrink-0">核心價值</span>
+            <input
+              value={editedPersona.values?.join(', ') || ''}
+              onChange={e => setEditedPersona({
+                ...editedPersona,
+                values: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
+              })}
+              placeholder="以逗號分隔，例：真誠, 自由"
+              className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm w-20 shrink-0">生活風格</span>
+            <input
+              value={editedPersona.weekly_lifestyle}
+              onChange={e => setEditedPersona({ ...editedPersona, weekly_lifestyle: e.target.value })}
+              className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            />
+          </div>
+          <button
+            onClick={handleSavePersona}
+            disabled={isSaving}
+            className="w-full border border-gray-400 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 disabled:opacity-50 mt-2"
+          >
+            {isSaving ? '儲存中...' : '儲存修改'}
+          </button>
+        </div>
+
+        {appearanceData && (
+          <div className="bg-blue-50 rounded-xl p-6 space-y-2 mb-4">
+            <h3 className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-3">外觀分析</h3>
+            <div className="grid grid-cols-1 gap-2 text-sm">
+              <div><span className="font-medium text-blue-700">臉部特徵：</span><span className="text-gray-700">{appearanceData.facial_features}</span></div>
+              <div><span className="font-medium text-blue-700">膚色：</span><span className="text-gray-700">{appearanceData.skin_tone}</span></div>
+              <div><span className="font-medium text-blue-700">髮型髮色：</span><span className="text-gray-700">{appearanceData.hair}</span></div>
+              <div><span className="font-medium text-blue-700">體型：</span><span className="text-gray-700">{appearanceData.body}</span></div>
+              <div><span className="font-medium text-blue-700">穿搭風格：</span><span className="text-gray-700">{appearanceData.style}</span></div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-blue-100">
+              <p className="text-xs font-medium text-blue-600 mb-1">生圖 Prompt</p>
+              <p className="text-xs text-gray-500 leading-relaxed">{appearanceData.image_prompt}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3 mt-2">
+          <button
+            onClick={() => { setStep('input') }}
+            className="flex-1 border border-gray-300 py-3 rounded-lg font-medium hover:bg-gray-50 text-sm"
+          >
+            🔄 重新生成人設
+          </button>
+          <button
+            onClick={() => {
+              storage.clearSchedule()
+              router.push('/dashboard')
+            }}
+            className="flex-2 flex-grow-[2] bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 text-sm"
+          >
+            確認人設，開始生成內容 →
+          </button>
+        </div>
         <button
-          onClick={() => { setStep('input') }}
-          className="flex-1 border border-gray-300 py-3 rounded-lg font-medium hover:bg-gray-50 text-sm"
+          onClick={() => setStep('input')}
+          className="mt-3 w-full text-sm text-gray-400 hover:text-black text-center transition-colors"
         >
-          🔄 重新生成人設
+          ← 修改描述或重新上傳圖片
         </button>
-        <button
-          onClick={() => {
-            storage.clearSchedule()
-            router.push('/dashboard')
-          }}
-          className="flex-2 flex-grow-[2] bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-800 text-sm"
-        >
-          確認人設，開始生成內容 →
-        </button>
-      </div>
-      <button
-        onClick={() => setStep('input')}
-        className="mt-3 w-full text-sm text-gray-400 hover:text-black text-center transition-colors"
-      >
-        ← 修改描述或重新上傳圖片
-      </button>
-    </main>
-  )
+      </main>
+    )
+  }
 
   // ── Step 2 render：輸入表單 ──────────────────────────────────────────────
   return (

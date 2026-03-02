@@ -1,9 +1,12 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from typing import List, Optional
+from pydantic import BaseModel
+import logging
 from app.models.persona import PersonaCreate, PersonaCard, PersonaResponse
 from app.services import genesis_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/analyze-appearance")
 async def analyze_appearance(
@@ -91,3 +94,24 @@ async def get_persona(persona_id: str):
 async def confirm_persona(persona: PersonaCard):
     """T4: 確認並鎖定人設"""
     return await genesis_service.confirm_persona(persona)
+
+
+class PersonaUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    occupation: Optional[str] = None
+    personality_tags: Optional[List[str]] = None
+    speech_pattern: Optional[str] = None
+    values: Optional[List[str]] = None
+    weekly_lifestyle: Optional[str] = None
+
+
+@router.patch("/persona/{persona_id}")
+async def update_persona(persona_id: str, req: PersonaUpdateRequest):
+    """更新人設欄位（部分更新）"""
+    from app.services.persona_storage import load_persona, save_persona
+    persona = load_persona(persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    updated = persona.model_copy(update=req.model_dump(exclude_none=True))
+    save_persona(persona_id, updated)
+    return {"persona_id": persona_id, "persona": updated}

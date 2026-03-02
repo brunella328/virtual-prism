@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 import anthropic
@@ -79,26 +79,39 @@ def _verify_persona(persona_id: str):
 
 
 @router.post("/generate-post/{persona_id}")
-async def generate_post(persona_id: str, req: GeneratePostRequest):
+async def generate_post(
+    persona_id: str,
+    date: str = Form(...),
+    appearance_prompt: str = Form(""),
+    user_hint: str = Form(""),
+    reference_image: Optional[UploadFile] = File(None),
+):
     """月曆模式：為指定日期生成單篇貼文（append，不覆蓋現有排程）"""
     _verify_persona(persona_id)
     from datetime import date as date_type
     # 驗證日期格式
     try:
-        date_type.fromisoformat(req.date)
+        date_type.fromisoformat(date)
     except ValueError:
-        raise HTTPException(status_code=422, detail=f"日期格式錯誤，請使用 YYYY-MM-DD：{req.date}")
+        raise HTTPException(status_code=422, detail=f"日期格式錯誤，請使用 YYYY-MM-DD：{date}")
     # 驗證每日上限（3 篇）
     from app.services.schedule_storage import load_schedule
     existing = load_schedule(persona_id)
-    day_count = sum(1 for p in existing if p.get("date") == req.date)
+    day_count = sum(1 for p in existing if p.get("date") == date)
     if day_count >= 3:
-        raise HTTPException(status_code=422, detail=f"{req.date} 已達每日上限（3 篇）")
+        raise HTTPException(status_code=422, detail=f"{date} 已達每日上限（3 篇）")
+    ref_url = ""
+    if reference_image:
+        from app.services.cloudinary_service import upload_file_bytes
+        data = await reference_image.read()
+        ref_url = await upload_file_bytes(data, folder="virtual_prism/refs")
     try:
         post = await life_stream_service.generate_single_post(
             persona_id=persona_id,
-            date=req.date,
-            appearance_prompt=req.appearance_prompt or "",
+            date=date,
+            appearance_prompt=appearance_prompt or "",
+            user_hint=user_hint or "",
+            reference_image_url=ref_url,
         )
         return post
     except ValueError as e:
@@ -164,11 +177,23 @@ async def update_post_image(persona_id: str, day: int, req: UpdatePostImageReque
 
 
 @router.post("/regenerate/{content_id}")
-async def regenerate(content_id: str, req: RegenerateRequest):
+async def regenerate(
+    content_id: str,
+    scene_prompt: str = Form(...),
+    instruction: str = Form(""),
+    persona_id: str = Form(""),
+    reference_image: Optional[UploadFile] = File(None),
+):
     """一鍵重繪：用正確的 scene_prompt + face_image_url 重新生圖"""
+    ref_url = ""
+    if reference_image:
+        from app.services.cloudinary_service import upload_file_bytes
+        data = await reference_image.read()
+        ref_url = await upload_file_bytes(data, folder="virtual_prism/refs")
     return await life_stream_service.regenerate_content(
         content_id=content_id,
-        scene_prompt=req.scene_prompt,
-        instruction=req.instruction or "",
-        persona_id=req.persona_id or ""
+        scene_prompt=scene_prompt,
+        instruction=instruction,
+        persona_id=persona_id,
+        reference_image_url=ref_url,
     )

@@ -211,14 +211,20 @@ async def generate_weekly_schedule(persona_id: str, appearance_prompt: str = "")
     return {"persona_id": persona_id, "generated_at": datetime.now().isoformat(), "schedule": days}
 
 
-async def generate_single_post(persona_id: str, date: str, appearance_prompt: str = "") -> dict:
+async def generate_single_post(
+    persona_id: str,
+    date: str,
+    appearance_prompt: str = "",
+    user_hint: str = "",
+    reference_image_url: str = "",
+) -> dict:
     """月曆模式：為指定日期生成單篇貼文並 append 到排程"""
     persona_data = load_persona(persona_id)
     if not persona_data:
         raise ValueError(f"Persona {persona_id} 不存在。")
 
     persona = persona_data.model_dump(exclude={"reference_face_url", "created_at", "id"})
-    face_image_url = persona_data.reference_face_url or ""
+    face_image_url = reference_image_url or persona_data.reference_face_url or ""
     base_prompt = (
         appearance_prompt
         or (persona_data.appearance.image_prompt if persona_data.appearance else "")
@@ -226,12 +232,15 @@ async def generate_single_post(persona_id: str, date: str, appearance_prompt: st
     )
 
     # Step 1: LLM 規劃 1 篇內容
+    user_content = f"請為以下人設規劃 1 篇 Instagram 內容（日期：{date}）：\n{json.dumps(persona, ensure_ascii=False)}"
+    if user_hint:
+        user_content += f"\n使用者偏好：{user_hint}"
     message = await client.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=512,
         messages=[{
             "role": "user",
-            "content": f"請為以下人設規劃 1 篇 Instagram 內容（日期：{date}）：\n{json.dumps(persona, ensure_ascii=False)}"
+            "content": user_content,
         }],
         system=SINGLE_POST_PROMPT,
     )
@@ -269,14 +278,21 @@ async def generate_single_post(persona_id: str, date: str, appearance_prompt: st
     return new_post
 
 
-async def regenerate_content(content_id: str, scene_prompt: str, instruction: str = "", persona_id: str = "") -> dict:
+async def regenerate_content(
+    content_id: str,
+    scene_prompt: str,
+    instruction: str = "",
+    persona_id: str = "",
+    reference_image_url: str = "",
+) -> dict:
     """一鍵重繪：正確重建 prompt 並帶入 face_image_url"""
-    face_image_url = ""
+    face_image_url = reference_image_url
     base_prompt = "attractive person, high quality, realistic"
     if persona_id:
         persona_data = load_persona(persona_id)
         if persona_data:
-            face_image_url = persona_data.reference_face_url or ""
+            if not face_image_url:
+                face_image_url = persona_data.reference_face_url or ""
 
     enhanced_scene = f"{scene_prompt}, {instruction}" if instruction else scene_prompt
     camera_style = _infer_camera_style(enhanced_scene)

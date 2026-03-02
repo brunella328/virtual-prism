@@ -76,6 +76,48 @@ async def upload_from_url(image_url: str, folder: str = "virtual_prism") -> str:
     return secure_url
 
 
+async def upload_file_bytes(data: bytes, folder: str = "virtual_prism/refs") -> str:
+    """
+    上傳 bytes 圖片到 Cloudinary（signed upload）。
+    用於前端上傳參考圖的情境（一次性場景/風格參考）。
+
+    Returns:
+        永久公開 URL（https://res.cloudinary.com/...）
+    """
+    if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_API_KEY or not CLOUDINARY_API_SECRET:
+        raise ValueError("Cloudinary 環境變數未設定")
+
+    upload_url = f"https://api.cloudinary.com/v1_1/{CLOUDINARY_CLOUD_NAME}/image/upload"
+    timestamp = str(int(time.time()))
+
+    params = {"folder": folder, "timestamp": timestamp}
+    signature = _make_signature(params, CLOUDINARY_API_SECRET)
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(
+            upload_url,
+            data={
+                "api_key": CLOUDINARY_API_KEY,
+                "timestamp": timestamp,
+                "signature": signature,
+                "folder": folder,
+            },
+            files={"file": ("ref.jpg", data, "image/jpeg")},
+        )
+
+    if r.status_code != 200:
+        logger.error(f"Cloudinary upload_file_bytes failed: {r.status_code} {r.text}")
+        raise RuntimeError(f"Cloudinary 上傳失敗：HTTP {r.status_code}")
+
+    resp_data = r.json()
+    secure_url = resp_data.get("secure_url", "")
+    if not secure_url:
+        raise RuntimeError(f"Cloudinary 回傳格式異常：{resp_data}")
+
+    logger.info(f"Bytes uploaded to Cloudinary: {secure_url}")
+    return secure_url
+
+
 async def upload_face_image(file_bytes: bytes, content_type: str = "image/jpeg") -> str:
     """
     上傳人臉參考圖到 Cloudinary（signed upload）。

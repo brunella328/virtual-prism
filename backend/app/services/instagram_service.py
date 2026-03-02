@@ -41,7 +41,7 @@ IG_TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 IG_LONG_LIVED_URL = "https://graph.instagram.com/access_token"
 IG_ME_URL = "https://graph.instagram.com/me"
 
-OAUTH_SCOPE = "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_messages"
+OAUTH_SCOPE = "instagram_business_basic,instagram_business_content_publish"
 
 # ---------------------------------------------------------------------------
 # Token store — in-memory + JSON 持久化
@@ -237,6 +237,7 @@ def get_auth_url(persona_id: str) -> str:
     if not INSTAGRAM_APP_ID:
         raise ValueError("INSTAGRAM_APP_ID is not configured")
 
+    from urllib.parse import urlencode
     params = {
         "client_id": INSTAGRAM_APP_ID,
         "redirect_uri": REDIRECT_URI,
@@ -244,8 +245,7 @@ def get_auth_url(persona_id: str) -> str:
         "response_type": "code",
         "state": persona_id,  # use persona_id as state for CSRF + routing
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"{IG_OAUTH_URL}?{query}"
+    return f"{IG_OAUTH_URL}?{urlencode(params)}"
 
 
 def exchange_code_for_token(code: str, state: str) -> dict:

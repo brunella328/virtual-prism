@@ -46,6 +46,8 @@ export default function DashboardPage() {
 
   // Regen confirm state
   const [pendingRegen, setPendingRegen] = useState<{ day: number; image_url: string; image_prompt: string } | null>(null)
+  const [regenRefImage, setRegenRefImage] = useState<File | null>(null)
+  const [regenRefPreview, setRegenRefPreview] = useState<string | null>(null)
 
   // Add post modal
   const [addPostDate, setAddPostDate] = useState<string | null>(null)
@@ -96,10 +98,12 @@ export default function DashboardPage() {
     setLoading(true)
     const today = new Date().toISOString().slice(0, 10)
     try {
+      const fd = new FormData()
+      fd.append('date', today)
+      fd.append('appearance_prompt', appearancePrompt || '')
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: today, appearance_prompt: appearancePrompt }),
+        body: fd,
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -117,14 +121,18 @@ export default function DashboardPage() {
   }
 
   // Add post for a specific date (from calendar click)
-  const handleAddPost = async () => {
+  const handleAddPost = async (hint: string, refImage: File | null) => {
     if (!addPostDate || !userId) return
     setAddPostLoading(true)
     try {
+      const fd = new FormData()
+      fd.append('date', addPostDate)
+      fd.append('appearance_prompt', appearancePrompt || '')
+      fd.append('user_hint', hint)
+      if (refImage) fd.append('reference_image', refImage)
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: addPostDate, appearance_prompt: appearancePrompt }),
+        body: fd,
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -152,19 +160,21 @@ export default function DashboardPage() {
     if (!item || !userId) return
     setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'regenerating' } : s))
     try {
+      const fd = new FormData()
+      fd.append('scene_prompt', item.scene_prompt || item.image_prompt || '')
+      fd.append('instruction', instruction || '')
+      fd.append('persona_id', userId)
+      if (regenRefImage) fd.append('reference_image', regenRefImage)
       const res = await fetch(`${API}/api/life-stream/regenerate/${day}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scene_prompt: item.scene_prompt || item.image_prompt,
-          instruction: instruction || '',
-          persona_id: userId,
-        }),
+        body: fd,
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const result = await res.json()
       setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
       setPendingRegen({ day, image_url: result.image_url, image_prompt: result.image_prompt })
+      setRegenRefImage(null)
+      setRegenRefPreview(null)
       addToast('重繪完成，請確認是否套用', 'info')
     } catch (e) {
       setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
@@ -370,16 +380,36 @@ export default function DashboardPage() {
                 )}
 
                 {/* Regen */}
-                <div className="flex gap-2">
-                  <input value={regenInstruction} onChange={e => setRegenInstruction(e.target.value)}
-                    placeholder="重繪指令（選填）：修復手指、改為戶外..."
-                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
-                    disabled={selectedItem.status === 'regenerating'} />
-                  <button
-                    onClick={() => { handleRegenerate(selectedItem.day, regenInstruction); setRegenInstruction('') }}
-                    disabled={selectedItem.status === 'regenerating'}
-                    className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40"
-                  >🔄 重繪</button>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input value={regenInstruction} onChange={e => setRegenInstruction(e.target.value)}
+                      placeholder="重繪指令（選填）：修復手指、改為戶外..."
+                      className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+                      disabled={selectedItem.status === 'regenerating'} />
+                    <button
+                      onClick={() => { handleRegenerate(selectedItem.day, regenInstruction); setRegenInstruction('') }}
+                      disabled={selectedItem.status === 'regenerating'}
+                      className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40"
+                    >🔄 重繪</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex-1 border border-dashed border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-pointer hover:bg-gray-50 text-center">
+                      {regenRefPreview
+                        ? <img src={regenRefPreview} alt="參考圖" className="h-10 mx-auto object-contain rounded" />
+                        : '上傳參考圖（選填）'}
+                      <input type="file" accept="image/*" className="hidden"
+                        disabled={selectedItem.status === 'regenerating'}
+                        onChange={e => {
+                          const f = e.target.files?.[0] || null
+                          setRegenRefImage(f)
+                          setRegenRefPreview(f ? URL.createObjectURL(f) : null)
+                        }} />
+                    </label>
+                    {regenRefImage && (
+                      <button onClick={() => { setRegenRefImage(null); setRegenRefPreview(null) }}
+                        className="text-xs text-gray-400 hover:text-red-500">✕</button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Publish (IG connected only) */}
@@ -436,7 +466,7 @@ export default function DashboardPage() {
         <AddPostModal
           date={addPostDate}
           loading={addPostLoading}
-          onConfirm={handleAddPost}
+          onConfirm={(hint, refImage) => handleAddPost(hint, refImage)}
           onCancel={() => setAddPostDate(null)}
         />
       )}
