@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +23,7 @@ interface MonthCalendarProps {
   schedule: DayContent[]
   onAddPost: (date: string) => void          // trigger AddPostModal
   onSelectPost: (post: DayContent) => void   // open detail panel
+  focusDate?: string                         // YYYY-MM-DD，切換到該月份
 }
 
 // ---------------------------------------------------------------------------
@@ -51,10 +52,17 @@ function getDaysInMonth(year: number, month: number): number {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function MonthCalendar({ schedule, onAddPost, onSelectPost }: MonthCalendarProps) {
+export default function MonthCalendar({ schedule, onAddPost, onSelectPost, focusDate }: MonthCalendarProps) {
   const today = new Date()
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
+
+  useEffect(() => {
+    if (!focusDate) return
+    const d = new Date(focusDate + 'T00:00:00')
+    setViewYear(d.getFullYear())
+    setViewMonth(d.getMonth())
+  }, [focusDate])
 
   const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate())
 

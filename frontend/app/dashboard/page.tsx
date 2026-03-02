@@ -53,6 +53,9 @@ export default function DashboardPage() {
   const [addPostDate, setAddPostDate] = useState<string | null>(null)
   const [addPostLoading, setAddPostLoading] = useState(false)
 
+  // Calendar focus
+  const [calendarFocusDate, setCalendarFocusDate] = useState<string | undefined>(undefined)
+
   // Keep selectedPost in sync with schedule updates
   const selectedItem = selectedPost
     ? (schedule.find(s => s.day === selectedPost.day) ?? selectedPost)
@@ -76,6 +79,9 @@ export default function DashboardPage() {
         if (posts.length > 0) {
           setSchedule(posts)
           storage.setSchedule(posts)
+          const todayStr = new Date().toISOString().slice(0, 10)
+          const todayPost = posts.find((p: DayContent) => p.date === todayStr)
+          if (todayPost) setSelectedPost(todayPost)
           setLoading(false)
         } else {
           generateTodayPost()
@@ -147,6 +153,7 @@ export default function DashboardPage() {
       addToast('貼文已生成 ✓', 'success')
       setAddPostDate(null)
       setSelectedPost(post)
+      setCalendarFocusDate(post.date)
     } catch (e) {
       addToast(`生成失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     } finally {
@@ -275,6 +282,7 @@ export default function DashboardPage() {
 
             <MonthCalendar
               schedule={schedule}
+              focusDate={calendarFocusDate}
               onAddPost={date => { setAddPostDate(date); setSelectedPost(null) }}
               onSelectPost={post => {
                 setSelectedPost(post)
