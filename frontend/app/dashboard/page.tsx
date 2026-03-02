@@ -75,7 +75,10 @@ export default function DashboardPage() {
     fetch(`${API}/api/life-stream/schedule/${userId}`)
       .then(r => r.json())
       .then(data => {
-        const posts = data.posts || []
+        const raw = data.posts || []
+        const posts = raw.map((p: DayContent) =>
+          p.scheduledAt ? { ...p, status: 'scheduled' as const } : p
+        )
         if (posts.length > 0) {
           setSchedule(posts)
           storage.setSchedule(posts)
@@ -262,12 +265,6 @@ export default function DashboardPage() {
         storage.setSchedule(updated)
         return updated
       })
-      // 同步後端 status
-      fetch(`${API}/api/life-stream/schedule/${userId}/${day}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'scheduled' }),
-      }).catch(() => {})
     } catch (e) {
       addToast(`排程失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
