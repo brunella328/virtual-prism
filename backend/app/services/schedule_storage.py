@@ -86,6 +86,19 @@ def update_post_content(persona_id: str, day: int, caption: str, scene_prompt: s
     return False
 
 
+def update_post_scheduled_at(persona_id: str, day: int, scheduled_at: str) -> bool:
+    """儲存 Instagram 排程時間（ISO 8601）"""
+    posts = load_schedule(persona_id)
+    if not posts:
+        return False
+    for post in posts:
+        if post.get("day") == day:
+            post["scheduledAt"] = scheduled_at
+            save_schedule(persona_id, posts)
+            return True
+    return False
+
+
 def update_post_image(persona_id: str, day: int, image_url: str, image_prompt: str) -> bool:
     """套用重繪結果：更新 image_url 與 image_prompt"""
     posts = load_schedule(persona_id)

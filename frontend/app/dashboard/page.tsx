@@ -266,6 +266,11 @@ export default function DashboardPage() {
         storage.setSchedule(updated)
         return updated
       })
+      fetch(`${API}/api/life-stream/schedule/${userId}/${day}/scheduled-at`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_at: new Date(publishAt).toISOString() }),
+      }).catch(() => {})
     } catch (e) {
       addToast(`排程失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }

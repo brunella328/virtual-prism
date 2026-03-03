@@ -144,6 +144,10 @@ class UpdatePostImageRequest(BaseModel):
     image_prompt: str
 
 
+class UpdatePostScheduledAtRequest(BaseModel):
+    scheduled_at: str  # ISO 8601
+
+
 @router.patch("/schedule/{persona_id}/{day}/status")
 async def update_post_status(persona_id: str, day: int, req: UpdatePostStatusRequest):
     """更新單篇貼文狀態"""
@@ -163,6 +167,16 @@ async def update_post_content(persona_id: str, day: int, req: UpdatePostContentR
     if not ok:
         raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
     return {"ok": True, "day": day}
+
+
+@router.patch("/schedule/{persona_id}/{day}/scheduled-at")
+async def update_post_scheduled_at(persona_id: str, day: int, req: UpdatePostScheduledAtRequest):
+    """儲存 Instagram 排程時間"""
+    from app.services.schedule_storage import update_post_scheduled_at
+    ok = update_post_scheduled_at(persona_id, day, req.scheduled_at)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
+    return {"ok": True, "day": day, "scheduled_at": req.scheduled_at}
 
 
 @router.patch("/schedule/{persona_id}/{day}/image")
