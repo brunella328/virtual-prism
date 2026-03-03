@@ -18,6 +18,12 @@ node_modules/
 .DS_Store
 *.log
 
+# Editor
+.vscode/
+
+# TypeScript build cache
+*.tsbuildinfo
+
 # Runtime data (sensitive)
 backend/data/
 backend/data/scheduler.db
