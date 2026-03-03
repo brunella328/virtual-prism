@@ -43,9 +43,10 @@ export default function DashboardPage() {
   const [regenInstruction, setRegenInstruction] = useState('')
   const [scheduleTime, setScheduleTime] = useState('')
   const [confirmPublish, setConfirmPublish] = useState(false)
+  const [publishing, setPublishing] = useState(false)
 
   // Regen confirm state
-  const [pendingRegen, setPendingRegen] = useState<{ day: number; image_url: string; image_prompt: string } | null>(null)
+  const [pendingRegen, setPendingRegen] = useState<{ post_id: string; image_url: string; image_prompt: string } | null>(null)
   const [regenRefImage, setRegenRefImage] = useState<File | null>(null)
   const [regenRefPreview, setRegenRefPreview] = useState<string | null>(null)
 
@@ -58,7 +59,7 @@ export default function DashboardPage() {
 
   // Keep selectedPost in sync with schedule updates
   const selectedItem = selectedPost
-    ? (schedule.find(s => s.day === selectedPost.day) ?? selectedPost)
+    ? (schedule.find(s => s.post_id === selectedPost.post_id) ?? selectedPost)
     : null
 
   // Auth guard + IG status
@@ -163,29 +164,29 @@ export default function DashboardPage() {
   }
 
   // Regenerate image
-  const handleRegenerate = async (day: number, instruction?: string) => {
-    const item = schedule.find(s => s.day === day)
+  const handleRegenerate = async (post_id: string, instruction?: string) => {
+    const item = schedule.find(s => s.post_id === post_id)
     if (!item || !userId) return
-    setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'regenerating' } : s))
+    setSchedule(prev => prev.map(s => s.post_id === post_id ? { ...s, status: 'regenerating' } : s))
     try {
       const fd = new FormData()
       fd.append('scene_prompt', item.scene_prompt || item.image_prompt || '')
       fd.append('instruction', instruction || '')
       fd.append('persona_id', userId)
       if (regenRefImage) fd.append('reference_image', regenRefImage)
-      const res = await fetch(`${API}/api/life-stream/regenerate/${day}`, {
+      const res = await fetch(`${API}/api/life-stream/regenerate/${post_id}`, {
         method: 'POST',
         body: fd,
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const result = await res.json()
-      setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
-      setPendingRegen({ day, image_url: result.image_url, image_prompt: result.image_prompt })
+      setSchedule(prev => prev.map(s => s.post_id === post_id ? { ...s, status: 'draft' } : s))
+      setPendingRegen({ post_id, image_url: result.image_url, image_prompt: result.image_prompt })
       setRegenRefImage(null)
       setRegenRefPreview(null)
       addToast('重繪完成，請確認是否套用', 'info')
     } catch (e) {
-      setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'draft' } : s))
+      setSchedule(prev => prev.map(s => s.post_id === post_id ? { ...s, status: 'draft' } : s))
       addToast(`重繪失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
   }
@@ -193,15 +194,15 @@ export default function DashboardPage() {
   // Apply regen result
   const handleApplyRegen = async () => {
     if (!pendingRegen || !userId) return
-    const { day, image_url, image_prompt } = pendingRegen
+    const { post_id, image_url, image_prompt } = pendingRegen
     setSchedule(prev => {
-      const updated = prev.map(s => s.day === day ? { ...s, image_url, image_prompt } : s)
+      const updated = prev.map(s => s.post_id === post_id ? { ...s, image_url, image_prompt } : s)
       storage.setSchedule(updated)
       return updated
     })
     setPendingRegen(null)
     try {
-      const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${day}/image`, {
+      const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/image`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url, image_prompt }),
@@ -214,17 +215,17 @@ export default function DashboardPage() {
   }
 
   // Save caption + scene_prompt
-  const handleSaveContent = async (day: number, caption: string, scenePrompt: string) => {
+  const handleSaveContent = async (post_id: string, caption: string, scenePrompt: string) => {
     if (!userId) return
     try {
-      const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${day}/content`, {
+      const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/content`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ caption, scene_prompt: scenePrompt }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setSchedule(prev => {
-        const updated = prev.map(s => s.day === day ? { ...s, caption, scene_prompt: scenePrompt } : s)
+        const updated = prev.map(s => s.post_id === post_id ? { ...s, caption, scene_prompt: scenePrompt } : s)
         storage.setSchedule(updated)
         return updated
       })
@@ -235,41 +236,45 @@ export default function DashboardPage() {
   }
 
   // Publish now
-  const handlePublishNow = async (day: number) => {
-    const item = schedule.find(s => s.day === day)
+  const handlePublishNow = async (post_id: string) => {
+    const item = schedule.find(s => s.post_id === post_id)
     if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
+    setPublishing(true)
     try {
-      const result = await publishNow(userId, day, item.image_url, item.caption)
+      const result = await publishNow(userId, post_id, item.image_url, item.caption)
       addToast(`發布成功 ✓ Media ID: ${result.media_id}`, 'success')
+      setConfirmPublish(false)
       setSchedule(prev => {
-        const updated = prev.map(s => s.day === day ? { ...s, status: 'published' as const } : s)
+        const updated = prev.map(s => s.post_id === post_id ? { ...s, status: 'published' as const } : s)
         storage.setSchedule(updated)
         return updated
       })
-      fetch(`${API}/api/life-stream/schedule/${userId}/${day}/status`, {
+      fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'published' }),
       }).catch(() => {})
     } catch (e) {
       addToast(`發布失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+    } finally {
+      setPublishing(false)
     }
   }
 
   // Schedule post
-  const handleSchedulePost = async (day: number, publishAt: string) => {
-    const item = schedule.find(s => s.day === day)
+  const handleSchedulePost = async (post_id: string, publishAt: string) => {
+    const item = schedule.find(s => s.post_id === post_id)
     if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
     try {
       await scheduleInstagramPosts(userId, [{
-        day,
+        post_id,
         image_url: item.image_url,
         caption: item.caption,
         publish_at: new Date(publishAt).toISOString(),
       }])
       addToast(`已排程 ✓ ${new Date(publishAt).toLocaleString('zh-TW')}`, 'success')
       setSchedule(prev => {
-        const updated = prev.map(s => s.day === day ? { ...s, scheduledAt: publishAt, status: 'scheduled' as const } : s)
+        const updated = prev.map(s => s.post_id === post_id ? { ...s, scheduledAt: publishAt, status: 'scheduled' as const } : s)
         storage.setSchedule(updated)
         return updated
       })
@@ -316,8 +321,8 @@ export default function DashboardPage() {
                   <div className="space-y-1">
                     <p className="text-xs text-gray-400 text-center">原圖</p>
                     <div className="aspect-square rounded-xl overflow-hidden bg-gray-100">
-                      {schedule.find(s => s.day === pendingRegen.day)?.image_url
-                        ? <img src={schedule.find(s => s.day === pendingRegen.day)!.image_url} alt="原圖" className="w-full h-full object-cover" />
+                      {schedule.find(s => s.post_id === pendingRegen.post_id)?.image_url
+                        ? <img src={schedule.find(s => s.post_id === pendingRegen.post_id)!.image_url} alt="原圖" className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-3xl">🖼️</div>}
                     </div>
                   </div>
@@ -378,7 +383,7 @@ export default function DashboardPage() {
                       <button
                         onClick={async () => {
                           setSaving(true)
-                          await handleSaveContent(selectedItem.day, editCaption, editScenePrompt)
+                          await handleSaveContent(selectedItem.post_id, editCaption, editScenePrompt)
                           setSaving(false)
                           setEditMode(false)
                         }}
@@ -410,7 +415,7 @@ export default function DashboardPage() {
                       className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
                       disabled={selectedItem.status === 'regenerating'} />
                     <button
-                      onClick={() => { handleRegenerate(selectedItem.day, regenInstruction); setRegenInstruction('') }}
+                      onClick={() => { handleRegenerate(selectedItem.post_id, regenInstruction); setRegenInstruction('') }}
                       disabled={selectedItem.status === 'regenerating'}
                       className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40"
                     >🔄 重繪</button>
@@ -454,10 +459,14 @@ export default function DashboardPage() {
                             {selectedItem.image_url && <img src={selectedItem.image_url} alt="" className="w-24 h-24 object-cover rounded-lg" />}
                             <p className="text-xs text-gray-500 line-clamp-2">{selectedItem.caption}</p>
                             <div className="flex gap-2">
-                              <button onClick={() => { handlePublishNow(selectedItem.day); setConfirmPublish(false) }}
-                                className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800">確認發布</button>
+                              <button onClick={() => handlePublishNow(selectedItem.post_id)}
+                                disabled={publishing}
+                                className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60">
+                                {publishing ? '發布中...' : '確認發布'}
+                              </button>
                               <button onClick={() => setConfirmPublish(false)}
-                                className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50">取消</button>
+                                disabled={publishing}
+                                className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
                             </div>
                           </div>
                         ) : (
@@ -469,7 +478,7 @@ export default function DashboardPage() {
                             min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
                             className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
                           <button
-                            onClick={() => { if (scheduleTime) { handleSchedulePost(selectedItem.day, scheduleTime); setScheduleTime('') } }}
+                            onClick={() => { if (scheduleTime) { handleSchedulePost(selectedItem.post_id, scheduleTime); setScheduleTime('') } }}
                             disabled={!scheduleTime}
                             className="px-4 py-2 bg-black text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-40"
                           >排程</button>

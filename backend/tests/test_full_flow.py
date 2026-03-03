@@ -206,6 +206,7 @@ class TestFullUserFlow:
             "persona_id": "default",
             "posts": [
                 {
+                    "post_id": "test-post-id-step6",
                     "image_url": "https://cdn.example.com/day1.jpg",
                     "caption": "排程貼文 Day 1",
                     "publish_at": future_time,

@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect } from 'react'
 // ---------------------------------------------------------------------------
 
 export interface DayContent {
+  post_id: string
   day: number
   date: string
   scene: string
@@ -173,7 +174,7 @@ export default function MonthCalendar({ schedule, onAddPost, onSelectPost, focus
                 <div className={`grid gap-0.5 flex-1 ${posts.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}>
                   {posts.map(post => (
                     <div
-                      key={post.day}
+                      key={post.post_id}
                       onClick={e => { e.stopPropagation(); onSelectPost(post) }}
                       className="relative aspect-square rounded overflow-hidden bg-gray-200 hover:ring-2 hover:ring-black"
                     >

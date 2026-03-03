@@ -38,7 +38,7 @@ export interface InstagramStatus {
 }
 
 export interface ScheduledPost {
-  day: number
+  post_id: string
   image_url: string
   caption: string
   publish_at: string  // ISO-8601 datetime string
@@ -85,13 +85,13 @@ export async function scheduleInstagramPosts(
  */
 export async function publishNow(
   personaId: string,
-  day: number,
+  postId: string,
   imageUrl: string,
   caption: string,
 ): Promise<{ success: boolean; media_id: string; persona_id: string }> {
   return apiPost('/api/instagram/publish-now', {
     persona_id: personaId,
-    day,
+    post_id: postId,
     image_url: imageUrl,
     caption: caption,
   })
