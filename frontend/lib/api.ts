@@ -85,11 +85,13 @@ export async function scheduleInstagramPosts(
  */
 export async function publishNow(
   personaId: string,
+  day: number,
   imageUrl: string,
   caption: string,
 ): Promise<{ success: boolean; media_id: string; persona_id: string }> {
   return apiPost('/api/instagram/publish-now', {
     persona_id: personaId,
+    day,
     image_url: imageUrl,
     caption: caption,
   })

@@ -37,6 +37,7 @@ class ScheduleRequest(BaseModel):
 
 class PublishNowRequest(BaseModel):
     persona_id: str
+    day: int = 0
     image_url: str
     caption: str
 
@@ -246,7 +247,7 @@ async def publish_now(body: PublishNowRequest):
         )
 
     try:
-        media_id = svc._execute_publish(body.persona_id, body.image_url, body.caption)
+        media_id = svc._execute_publish(body.persona_id, body.day, body.image_url, body.caption)
         return {
             "success": True,
             "media_id": media_id,

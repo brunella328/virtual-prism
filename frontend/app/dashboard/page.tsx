@@ -239,7 +239,7 @@ export default function DashboardPage() {
     const item = schedule.find(s => s.day === day)
     if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
     try {
-      const result = await publishNow(userId, item.image_url, item.caption)
+      const result = await publishNow(userId, day, item.image_url, item.caption)
       addToast(`發布成功 ✓ Media ID: ${result.media_id}`, 'success')
       setSchedule(prev => {
         const updated = prev.map(s => s.day === day ? { ...s, status: 'published' as const } : s)
