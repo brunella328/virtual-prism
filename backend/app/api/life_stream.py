@@ -123,10 +123,22 @@ async def generate_post(
 
 @router.get("/schedule/{persona_id}")
 async def get_schedule(persona_id: str):
-    """T5: 讀取排程（後端為 source of truth）"""
+    """T5: 讀取排程（後端為 source of truth），cross-reference APScheduler enrichment"""
     _verify_persona(persona_id)
     from app.services.schedule_storage import load_schedule
+    from app.services.instagram_service import get_scheduled_posts
     posts = load_schedule(persona_id)
+    # 用 APScheduler 的 job 資料 enrich scheduledAt 與 status
+    scheduled_jobs = {
+        j["day"]: j["run_date"]
+        for j in get_scheduled_posts(persona_id)
+        if j["day"] is not None
+    }
+    for post in posts:
+        day = post.get("day")
+        if day in scheduled_jobs:
+            post["scheduledAt"] = scheduled_jobs[day]
+            post["status"] = "scheduled"
     return {"persona_id": persona_id, "posts": posts}
 
 

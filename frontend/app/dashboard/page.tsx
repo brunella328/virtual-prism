@@ -76,10 +76,7 @@ export default function DashboardPage() {
     fetch(`${API}/api/life-stream/schedule/${userId}`)
       .then(r => r.json())
       .then(data => {
-        const raw = data.posts || []
-        const posts = raw.map((p: DayContent) =>
-          p.scheduledAt ? { ...p, status: 'scheduled' as const } : p
-        )
+        const posts = data.posts || []
         if (posts.length > 0) {
           setSchedule(posts)
           storage.setSchedule(posts)
@@ -244,7 +241,16 @@ export default function DashboardPage() {
     try {
       const result = await publishNow(userId, item.image_url, item.caption)
       addToast(`發布成功 ✓ Media ID: ${result.media_id}`, 'success')
-      setSchedule(prev => prev.map(s => s.day === day ? { ...s, status: 'published' } : s))
+      setSchedule(prev => {
+        const updated = prev.map(s => s.day === day ? { ...s, status: 'published' as const } : s)
+        storage.setSchedule(updated)
+        return updated
+      })
+      fetch(`${API}/api/life-stream/schedule/${userId}/${day}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'published' }),
+      }).catch(() => {})
     } catch (e) {
       addToast(`發布失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
@@ -256,6 +262,7 @@ export default function DashboardPage() {
     if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
     try {
       await scheduleInstagramPosts(userId, [{
+        day,
         image_url: item.image_url,
         caption: item.caption,
         publish_at: new Date(publishAt).toISOString(),
@@ -266,11 +273,6 @@ export default function DashboardPage() {
         storage.setSchedule(updated)
         return updated
       })
-      fetch(`${API}/api/life-stream/schedule/${userId}/${day}/scheduled-at`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheduled_at: new Date(publishAt).toISOString() }),
-      }).catch(() => {})
     } catch (e) {
       addToast(`排程失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }

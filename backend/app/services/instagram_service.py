@@ -607,7 +607,7 @@ def publish_media(ig_account_id: str, creation_id: str, access_token: str) -> st
     return media_id
 
 
-def _execute_publish(persona_id: str, image_url: str, caption: str) -> str:
+def _execute_publish(persona_id: str, day: int, image_url: str, caption: str) -> str:
     """Internal: look up token + upload + publish.  Called by scheduler or directly."""
     info = _require_token(persona_id)
     access_token = info["access_token"]
@@ -615,7 +615,15 @@ def _execute_publish(persona_id: str, image_url: str, caption: str) -> str:
 
     creation_id = upload_photo(ig_account_id, image_url, caption, access_token)
     media_id = publish_media(ig_account_id, creation_id, access_token)
-    logger.info("Published media_id=%s for persona_id=%s", media_id, persona_id)
+    logger.info("Published media_id=%s for persona_id=%s day=%s", media_id, persona_id, day)
+
+    # 回寫 schedule storage
+    try:
+        from app.services.schedule_storage import update_post_status
+        update_post_status(persona_id, day, "published")
+    except Exception as e:
+        logger.warning("Failed to update post status after publish: %s", e)
+
     return media_id
 
 
@@ -626,6 +634,7 @@ def _execute_publish(persona_id: str, image_url: str, caption: str) -> str:
 def schedule_post(
     persona_id: str,
     ig_account_id: str,
+    day: int,
     image_url: str,
     caption: str,
     publish_at: datetime,
@@ -645,26 +654,31 @@ def schedule_post(
         _execute_publish,
         trigger="date",
         run_date=publish_at,
-        args=[persona_id, image_url, caption],
+        args=[persona_id, day, image_url, caption],
         id=job_id,
-        name=f"{persona_id}:{caption[:30]}",
+        name=f"{persona_id}:day:{day}",
         misfire_grace_time=300,  # 5-minute grace window
     )
-    logger.info("Scheduled job_id=%s for persona_id=%s at %s", job_id, persona_id, publish_at)
+    logger.info("Scheduled job_id=%s for persona_id=%s day=%s at %s", job_id, persona_id, day, publish_at)
     return job_id
 
 
 def get_scheduled_posts(persona_id: str) -> list[dict]:
     """
-    Return scheduled jobs for a persona.
+    Return scheduled jobs for a persona, including the linked post day.
     """
     jobs = _scheduler.get_jobs()
     result = []
     for job in jobs:
-        if job.name.startswith(f"{persona_id}:"):
+        if job.name.startswith(f"{persona_id}:day:"):
+            try:
+                day = int(job.name.split(":day:")[1])
+            except (IndexError, ValueError):
+                day = None
             result.append({
                 "job_id": job.id,
                 "name": job.name,
+                "day": day,
                 "run_date": job.next_run_time.isoformat() if job.next_run_time else None,
                 "persona_id": persona_id,
             })

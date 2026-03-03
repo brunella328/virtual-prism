@@ -38,6 +38,7 @@ export interface InstagramStatus {
 }
 
 export interface ScheduledPost {
+  day: number
   image_url: string
   caption: string
   publish_at: string  // ISO-8601 datetime string

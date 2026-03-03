@@ -23,6 +23,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 class ScheduledPostItem(BaseModel):
+    day: int              # 對應 schedule_storage 的 post.day
     image_url: str
     caption: str
     publish_at: datetime  # ISO-8601, e.g. "2025-03-01T10:00:00Z"
@@ -202,12 +203,13 @@ async def create_schedule(body: ScheduleRequest):
         job_id = svc.schedule_post(
             persona_id=body.persona_id,
             ig_account_id=ig_account_id,
+            day=post.day,
             image_url=post.image_url,
             caption=post.caption,
             publish_at=publish_at,
             access_token=access_token,
         )
-        job_ids.append({"job_id": job_id, "publish_at": publish_at.isoformat()})
+        job_ids.append({"job_id": job_id, "publish_at": publish_at.isoformat(), "day": post.day})
 
     return {"scheduled": job_ids, "count": len(job_ids)}
 
