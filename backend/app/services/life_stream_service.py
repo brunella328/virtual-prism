@@ -293,6 +293,10 @@ async def regenerate_content(
         if persona_data:
             if not face_image_url:
                 face_image_url = persona_data.reference_face_url or ""
+            base_prompt = (
+                (persona_data.appearance.image_prompt if persona_data.appearance else "")
+                or base_prompt
+            )
 
     enhanced_scene = f"{scene_prompt}, {instruction}" if instruction else scene_prompt
     camera_style = _infer_camera_style(enhanced_scene)
