@@ -607,24 +607,55 @@ def publish_media(ig_account_id: str, creation_id: str, access_token: str) -> st
     return media_id
 
 
-def _execute_publish(persona_id: str, day: int, image_url: str, caption: str) -> str:
-    """Internal: look up token + upload + publish.  Called by scheduler or directly."""
+def _execute_publish(persona_id: str, post_id: str, image_url: str, caption: str) -> str:
+    """Internal: look up token + upload + publish.  Called by scheduler or directly.
+
+    On success: writes status='published', published_at, ig_media_id to schedule_storage.
+    On failure: writes status='failed', error_message, sends Telegram notification.
+    Always re-raises on failure so APScheduler logs the exception.
+    """
+    from app.services.schedule_storage import update_post_fields
+
     info = _require_token(persona_id)
     access_token = info["access_token"]
     ig_account_id = info["ig_account_id"]
 
-    creation_id = upload_photo(ig_account_id, image_url, caption, access_token)
-    media_id = publish_media(ig_account_id, creation_id, access_token)
-    logger.info("Published media_id=%s for persona_id=%s day=%s", media_id, persona_id, day)
-
-    # 回寫 schedule storage
     try:
-        from app.services.schedule_storage import update_post_status
-        update_post_status(persona_id, day, "published")
-    except Exception as e:
-        logger.warning("Failed to update post status after publish: %s", e)
+        creation_id = upload_photo(ig_account_id, image_url, caption, access_token)
+        media_id = publish_media(ig_account_id, creation_id, access_token)
+        logger.info("Published media_id=%s for persona_id=%s post_id=%s", media_id, persona_id, post_id)
 
-    return media_id
+        try:
+            update_post_fields(
+                persona_id, post_id,
+                status="published",
+                published_at=datetime.now(timezone.utc).isoformat(),
+                ig_media_id=media_id,
+                job_id=None,
+            )
+        except Exception as se:
+            logger.warning("Failed to persist published status for post_id=%s: %s", post_id, se)
+
+        return media_id
+
+    except Exception as e:
+        logger.error("Publish failed for persona_id=%s post_id=%s: %s", persona_id, post_id, e)
+        try:
+            update_post_fields(
+                persona_id, post_id,
+                status="failed",
+                error_message=str(e)[:500],
+            )
+        except Exception as se:
+            logger.warning("Failed to persist failed status for post_id=%s: %s", post_id, se)
+        _send_telegram(
+            f"🚨 *Virtual Prism - 貼文發布失敗*\n\n"
+            f"persona\\_id: `{persona_id}`\n"
+            f"post\\_id: `{post_id}`\n"
+            f"錯誤: `{str(e)[:200]}`\n\n"
+            f"貼文狀態已更新為 failed，請手動處理。"
+        )
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -634,7 +665,7 @@ def _execute_publish(persona_id: str, day: int, image_url: str, caption: str) ->
 def schedule_post(
     persona_id: str,
     ig_account_id: str,
-    day: int,
+    post_id: str,
     image_url: str,
     caption: str,
     publish_at: datetime,
@@ -642,46 +673,70 @@ def schedule_post(
 ) -> str:
     """
     Schedule a post via APScheduler.  Returns the job_id.
-    IG Graph API doesn't support native scheduling, so we use APScheduler.
+    Idempotent: cancels any existing job for the same post_id before creating a new one.
+    Persists scheduled_at + job_id to schedule_storage after scheduling.
     """
-    job_id = str(uuid.uuid4())
+    from app.services.schedule_storage import get_post, update_post_fields
+
+    # Idempotency: cancel existing job for this post_id
+    existing = get_post(persona_id, post_id)
+    if existing and existing.get("job_id"):
+        try:
+            _scheduler.remove_job(existing["job_id"])
+            logger.info("Cancelled existing job_id=%s for post_id=%s (re-scheduling)", existing["job_id"], post_id)
+        except Exception:
+            pass  # job may already be gone (executed or misfired)
 
     # Ensure publish_at is timezone-aware UTC
     if publish_at.tzinfo is None:
         publish_at = publish_at.replace(tzinfo=timezone.utc)
 
+    job_id = str(uuid.uuid4())
     _scheduler.add_job(
         _execute_publish,
         trigger="date",
         run_date=publish_at,
-        args=[persona_id, day, image_url, caption],
+        args=[persona_id, post_id, image_url, caption],
         id=job_id,
-        name=f"{persona_id}:day:{day}",
+        name=f"{persona_id}:{post_id}",
         misfire_grace_time=300,  # 5-minute grace window
     )
-    logger.info("Scheduled job_id=%s for persona_id=%s day=%s at %s", job_id, persona_id, day, publish_at)
+
+    # Persist scheduling info to the post record
+    try:
+        update_post_fields(
+            persona_id, post_id,
+            status="scheduled",
+            scheduled_at=publish_at.isoformat(),
+            job_id=job_id,
+        )
+    except Exception as e:
+        logger.warning("Failed to persist schedule info for post_id=%s: %s", post_id, e)
+
+    logger.info("Scheduled job_id=%s for persona_id=%s post_id=%s at %s", job_id, persona_id, post_id, publish_at)
     return job_id
 
 
 def get_scheduled_posts(persona_id: str) -> list[dict]:
     """
-    Return scheduled jobs for a persona, including the linked post day.
+    Return pending APScheduler jobs for a persona.
+    Job name format: "{persona_id}:{post_id}"
+    Token refresh jobs have name "IG token refresh ({persona_id})" — excluded automatically.
     """
+    prefix = f"{persona_id}:"
     jobs = _scheduler.get_jobs()
     result = []
     for job in jobs:
-        if job.name.startswith(f"{persona_id}:day:"):
-            try:
-                day = int(job.name.split(":day:")[1])
-            except (IndexError, ValueError):
-                day = None
-            result.append({
-                "job_id": job.id,
-                "name": job.name,
-                "day": day,
-                "run_date": job.next_run_time.isoformat() if job.next_run_time else None,
-                "persona_id": persona_id,
-            })
+        if not job.name.startswith(prefix):
+            continue
+        post_id = job.name[len(prefix):]
+        result.append({
+            "job_id": job.id,
+            "name": job.name,
+            "post_id": post_id,
+            "run_date": job.next_run_time.isoformat() if job.next_run_time else None,
+            "persona_id": persona_id,
+        })
     return result
 
 
