@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@/contexts/UserContext'
 import { storage } from '@/lib/storage'
@@ -18,10 +18,12 @@ const STATUS_BADGE: Record<string, string> = {
   published: 'bg-blue-100 text-blue-700',
   rejected: 'bg-red-100 text-red-600',
   regenerating: 'bg-yellow-100 text-yellow-700',
+  scheduled: 'bg-purple-100 text-purple-700',
+  failed: 'bg-red-100 text-red-700',
 }
 const STATUS_LABEL: Record<string, string> = {
   draft: '草稿', approved: '已核准', published: '已發布',
-  rejected: '需重繪', regenerating: '重繪中', scheduled: '已排程',
+  rejected: '需重繪', regenerating: '重繪中', scheduled: '待發布', failed: '發布失敗',
 }
 
 export default function DashboardPage() {
@@ -56,6 +58,30 @@ export default function DashboardPage() {
 
   // Calendar focus
   const [calendarFocusDate, setCalendarFocusDate] = useState<string | undefined>(undefined)
+
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState<string | null>(null)
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const post of schedule) {
+      counts[post.status] = (counts[post.status] || 0) + 1
+    }
+    return counts
+  }, [schedule])
+
+  const filteredSchedule = statusFilter
+    ? schedule.filter(s => s.status === statusFilter)
+    : schedule
+
+  // When switching to 'scheduled' filter, jump to first scheduled post's month
+  useEffect(() => {
+    if (statusFilter !== 'scheduled') return
+    const first = schedule
+      .filter(s => s.status === 'scheduled')
+      .sort((a, b) => (a.scheduled_at || a.date).localeCompare(b.scheduled_at || b.date))[0]
+    if (first) setCalendarFocusDate(first.date)
+  }, [statusFilter])
 
   // Keep selectedPost in sync with schedule updates
   const selectedItem = selectedPost
@@ -300,8 +326,42 @@ export default function DashboardPage() {
               <p className="text-gray-500 text-sm mt-1">點擊日期新增貼文，點擊圖片編輯或重繪</p>
             </div>
 
+            {/* Status filter chips */}
+            {schedule.length > 0 && (
+              <div className="flex gap-2 flex-wrap items-center">
+                {[
+                  { key: 'scheduled', label: '待發布' },
+                  { key: 'draft',     label: '草稿'   },
+                  { key: 'approved',  label: '已核准' },
+                  { key: 'published', label: '已發布' },
+                  { key: 'failed',    label: '發布失敗' },
+                  { key: 'rejected',  label: '需重繪' },
+                ].filter(f => (statusCounts[f.key] ?? 0) > 0).map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setStatusFilter(statusFilter === f.key ? null : f.key)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm border transition-colors ${
+                      statusFilter === f.key
+                        ? 'bg-black text-white border-black'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {f.label}
+                    <span className={`text-xs font-semibold ${statusFilter === f.key ? 'text-white' : 'text-gray-400'}`}>
+                      {statusCounts[f.key]}
+                    </span>
+                  </button>
+                ))}
+                {statusFilter && (
+                  <button onClick={() => setStatusFilter(null)} className="text-xs text-gray-400 hover:text-gray-700 ml-1">
+                    清除 ✕
+                  </button>
+                )}
+              </div>
+            )}
+
             <MonthCalendar
-              schedule={schedule}
+              schedule={filteredSchedule}
               focusDate={calendarFocusDate}
               onAddPost={date => { setAddPostDate(date); setSelectedPost(null) }}
               onSelectPost={post => {
@@ -444,11 +504,13 @@ export default function DashboardPage() {
                 {igConnected && selectedItem.status !== 'regenerating' && (
                   <div className="border-t pt-4 space-y-3">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">發布</p>
-                    {selectedItem.scheduledAt ? (
+                    {(selectedItem.scheduledAt || selectedItem.scheduled_at) ? (
                       <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3">
                         <div>
                           <p className="text-sm font-medium text-blue-800">已排程</p>
-                          <p className="text-xs text-blue-600">{new Date(selectedItem.scheduledAt).toLocaleString('zh-TW')}</p>
+                          <p className="text-xs text-blue-600">
+                            {new Date(selectedItem.scheduledAt || selectedItem.scheduled_at!).toLocaleString('zh-TW')}
+                          </p>
                         </div>
                       </div>
                     ) : (

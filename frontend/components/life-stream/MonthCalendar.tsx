@@ -18,6 +18,7 @@ export interface DayContent {
   status: 'draft' | 'approved' | 'published' | 'rejected' | 'regenerating' | 'scheduled'
   hashtags?: string[]
   scheduledAt?: string
+  scheduled_at?: string   // backend field name (snake_case)
 }
 
 interface MonthCalendarProps {
@@ -36,10 +37,11 @@ const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const STATUS_DOT: Record<string, string> = {
   draft: 'bg-gray-400',
   approved: 'bg-green-500',
-  scheduled: 'bg-green-500',
+  scheduled: 'bg-purple-500',
   published: 'bg-blue-500',
   rejected: 'bg-red-400',
   regenerating: 'bg-yellow-400',
+  failed: 'bg-red-600',
 }
 
 function toDateStr(year: number, month: number, day: number): string {
@@ -212,6 +214,7 @@ export default function MonthCalendar({ schedule, onAddPost, onSelectPost, focus
         {[
           { label: '草稿', color: 'bg-gray-400' },
           { label: '已核准', color: 'bg-green-500' },
+          { label: '待發布', color: 'bg-purple-500' },
           { label: '已發布', color: 'bg-blue-500' },
         ].map(({ label, color }) => (
           <div key={label} className="flex items-center gap-1">
