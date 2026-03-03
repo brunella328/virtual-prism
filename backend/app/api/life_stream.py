@@ -123,22 +123,12 @@ async def generate_post(
 
 @router.get("/schedule/{persona_id}")
 async def get_schedule(persona_id: str):
-    """T5: 讀取排程（後端為 source of truth），cross-reference APScheduler enrichment"""
+    """讀取排程（schedule_storage 為 source of truth）
+    status / scheduled_at / job_id 均持久化在 JSON，不需 runtime cross-reference。
+    """
     _verify_persona(persona_id)
     from app.services.schedule_storage import load_schedule
-    from app.services.instagram_service import get_scheduled_posts
     posts = load_schedule(persona_id)
-    # 用 APScheduler 的 job 資料 enrich scheduledAt 與 status
-    scheduled_jobs = {
-        j["day"]: j["run_date"]
-        for j in get_scheduled_posts(persona_id)
-        if j["day"] is not None
-    }
-    for post in posts:
-        day = post.get("day")
-        if day in scheduled_jobs:
-            post["scheduledAt"] = scheduled_jobs[day]
-            post["status"] = "scheduled"
     return {"persona_id": persona_id, "posts": posts}
 
 
@@ -160,46 +150,46 @@ class UpdatePostScheduledAtRequest(BaseModel):
     scheduled_at: str  # ISO 8601
 
 
-@router.patch("/schedule/{persona_id}/{day}/status")
-async def update_post_status(persona_id: str, day: int, req: UpdatePostStatusRequest):
+@router.patch("/schedule/{persona_id}/{post_id}/status")
+async def update_post_status(persona_id: str, post_id: str, req: UpdatePostStatusRequest):
     """更新單篇貼文狀態"""
     from app.services.schedule_storage import update_post_status
-    ok = update_post_status(persona_id, day, req.status)
+    ok = update_post_status(persona_id, post_id, req.status)
     if not ok:
-        raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
-    return {"ok": True, "day": day, "status": req.status}
+        raise HTTPException(status_code=404, detail=f"Post post_id={post_id} not found for persona {persona_id}")
+    return {"ok": True, "post_id": post_id, "status": req.status}
 
 
-@router.patch("/schedule/{persona_id}/{day}/content")
-async def update_post_content(persona_id: str, day: int, req: UpdatePostContentRequest):
+@router.patch("/schedule/{persona_id}/{post_id}/content")
+async def update_post_content(persona_id: str, post_id: str, req: UpdatePostContentRequest):
     """更新單篇貼文的文案與重繪方向（scene_prompt）"""
     _verify_persona(persona_id)
     from app.services.schedule_storage import update_post_content
-    ok = update_post_content(persona_id, day, req.caption, req.scene_prompt)
+    ok = update_post_content(persona_id, post_id, req.caption, req.scene_prompt)
     if not ok:
-        raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
-    return {"ok": True, "day": day}
+        raise HTTPException(status_code=404, detail=f"Post post_id={post_id} not found for persona {persona_id}")
+    return {"ok": True, "post_id": post_id}
 
 
-@router.patch("/schedule/{persona_id}/{day}/scheduled-at")
-async def update_post_scheduled_at(persona_id: str, day: int, req: UpdatePostScheduledAtRequest):
-    """儲存 Instagram 排程時間"""
+@router.patch("/schedule/{persona_id}/{post_id}/scheduled-at")
+async def update_post_scheduled_at(persona_id: str, post_id: str, req: UpdatePostScheduledAtRequest):
+    """手動覆寫排程時間（一般由 schedule_post 自動處理）"""
     from app.services.schedule_storage import update_post_scheduled_at
-    ok = update_post_scheduled_at(persona_id, day, req.scheduled_at)
+    ok = update_post_scheduled_at(persona_id, post_id, req.scheduled_at)
     if not ok:
-        raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
-    return {"ok": True, "day": day, "scheduled_at": req.scheduled_at}
+        raise HTTPException(status_code=404, detail=f"Post post_id={post_id} not found for persona {persona_id}")
+    return {"ok": True, "post_id": post_id, "scheduled_at": req.scheduled_at}
 
 
-@router.patch("/schedule/{persona_id}/{day}/image")
-async def update_post_image(persona_id: str, day: int, req: UpdatePostImageRequest):
+@router.patch("/schedule/{persona_id}/{post_id}/image")
+async def update_post_image(persona_id: str, post_id: str, req: UpdatePostImageRequest):
     """套用重繪結果：持久化新的 image_url 與 image_prompt"""
     _verify_persona(persona_id)
     from app.services.schedule_storage import update_post_image
-    ok = update_post_image(persona_id, day, req.image_url, req.image_prompt)
+    ok = update_post_image(persona_id, post_id, req.image_url, req.image_prompt)
     if not ok:
-        raise HTTPException(status_code=404, detail=f"Post day={day} not found for persona {persona_id}")
-    return {"ok": True, "day": day}
+        raise HTTPException(status_code=404, detail=f"Post post_id={post_id} not found for persona {persona_id}")
+    return {"ok": True, "post_id": post_id}
 
 
 @router.post("/regenerate/{content_id}")

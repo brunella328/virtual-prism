@@ -189,6 +189,7 @@ class TestFullUserFlow:
              patch("requests.post", side_effect=mock_post):
             resp = client.post("/api/instagram/publish-now", json={
                 "persona_id": "default",
+                "post_id": "test-post-id-fullflow",
                 "image_url": "https://cdn.example.com/generated.jpg",
                 "caption": "今天的生活 ✨ #lifestyle #健康",
             })

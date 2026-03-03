@@ -83,6 +83,7 @@ class TestPublishNow:
 
             resp = client.post("/api/instagram/publish-now", json={
                 "persona_id": "default",
+                "post_id": "test-post-id-publish",
                 "image_url": "https://example.com/photo.jpg",
                 "caption": "Test caption #test",
             })
@@ -94,6 +95,7 @@ class TestPublishNow:
     def test_publish_now_not_connected_returns_400(self, client):
         resp = client.post("/api/instagram/publish-now", json={
             "persona_id": "disconnected_persona",
+            "post_id": "test-post-id-notconn",
             "image_url": "https://example.com/photo.jpg",
             "caption": "Test",
         })
@@ -118,6 +120,7 @@ class TestPublishNow:
 
             resp = client.post("/api/instagram/publish-now", json={
                 "persona_id": "default",
+                "post_id": "test-post-id-webp",
                 "image_url": "https://example.com/photo.webp",
                 "caption": "Test",
             })
@@ -144,6 +147,7 @@ class TestScheduleCreate:
             "persona_id": "default",
             "posts": [
                 {
+                    "post_id": "test-post-id-future",
                     "image_url": "https://example.com/photo.jpg",
                     "caption": "Tomorrow post",
                     "publish_at": self._future_iso(60),
@@ -155,12 +159,14 @@ class TestScheduleCreate:
         assert data["count"] == 1
         assert len(data["scheduled"]) == 1
         assert "job_id" in data["scheduled"][0]
+        assert data["scheduled"][0]["post_id"] == "test-post-id-future"
 
     def test_schedule_past_returns_400(self, client):
         resp = client.post("/api/instagram/schedule", json={
             "persona_id": "default",
             "posts": [
                 {
+                    "post_id": "test-post-id-past",
                     "image_url": "https://example.com/photo.jpg",
                     "caption": "Old post",
                     "publish_at": self._past_iso(60),
@@ -175,6 +181,7 @@ class TestScheduleCreate:
             "persona_id": "no_ig_persona",
             "posts": [
                 {
+                    "post_id": "test-post-id-noconn",
                     "image_url": "https://example.com/photo.jpg",
                     "caption": "Post",
                     "publish_at": self._future_iso(60),
@@ -207,7 +214,7 @@ class TestScheduleDelete:
         future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
         resp = client.post("/api/instagram/schedule", json={
             "persona_id": "default",
-            "posts": [{"image_url": "https://example.com/p.jpg", "caption": "c", "publish_at": future}]
+            "posts": [{"post_id": "test-post-id-cancel", "image_url": "https://example.com/p.jpg", "caption": "c", "publish_at": future}]
         })
         assert resp.status_code == 201
         return resp.json()["scheduled"][0]["job_id"]
