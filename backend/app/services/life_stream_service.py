@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 import asyncio
 import logging
 import anthropic
@@ -191,11 +192,14 @@ async def generate_weekly_schedule(persona_id: str, appearance_prompt: str = "")
         )
         return {
             **item,
+            "post_id": str(uuid.uuid4()),
             "image_prompt": full_prompt,
             "date": date,
             "image_url": image_url,
             "seed": item.get("seed", 42) if image_url else -1,
             "status": "draft",
+            "scheduled_at": None,
+            "job_id": None,
         }
 
     days = []
@@ -266,15 +270,18 @@ async def generate_single_post(
     next_day = max((p.get("day", 0) for p in existing), default=0) + 1
     new_post = {
         **item,
+        "post_id": str(uuid.uuid4()),
         "day": next_day,
         "date": date,
         "image_url": image_url,
         "image_prompt": full_prompt,
         "seed": -1,
         "status": "draft",
+        "scheduled_at": None,
+        "job_id": None,
     }
     save_schedule(persona_id, existing + [new_post])
-    logger.info(f"Single post generated for persona={persona_id} date={date} day={next_day}")
+    logger.info(f"Single post generated for persona={persona_id} date={date} day={next_day} post_id={new_post['post_id']}")
     return new_post
 
 
