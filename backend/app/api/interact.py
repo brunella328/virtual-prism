@@ -53,7 +53,7 @@ async def instagram_webhook_verify(
 async def instagram_webhook(request: Request):
     """
     Receive IG Webhook events (POST).
-    Parses entry[].changes[] for comment events, generates drafts.
+    Parses entry[].changes[] for comment events and entry[].messaging[] for DMs.
     """
     raw_body = await request.body()
 
@@ -74,6 +74,7 @@ async def instagram_webhook(request: Request):
 
     entries = payload.get("entry", [])
     for entry in entries:
+        # ── Comment events ────────────────────────────────────────────────────
         changes = entry.get("changes", [])
         for change in changes:
             field = change.get("field", "")
@@ -88,14 +89,12 @@ async def instagram_webhook(request: Request):
             comment_text = value.get("text", "")
 
             # Derive persona_id from media owner (best-effort: scan token store)
-            ig_account_id_from_webhook = fan_id
-            persona_id = _resolve_persona_id(ig_account_id_from_webhook)
+            persona_id = _resolve_persona_id(fan_id)
 
             if not comment_text:
                 logger.warning("Received comment event with empty text, skipping")
                 continue
 
-            # Update fan memory before generating the reply
             if fan_id:
                 try:
                     fan_memory_service.upsert_fan(persona_id, fan_id, commenter_name, comment_text)
@@ -104,13 +103,12 @@ async def instagram_webhook(request: Request):
 
             try:
                 draft_text = interact_service.generate_reply_draft(
-                    persona_id, comment_text, commenter_name, fan_id=fan_id
+                    persona_id, comment_text, commenter_name, fan_id=fan_id, channel="comment"
                 )
                 risk_level = interact_service.check_risk(comment_text)
                 mode = interact_service.get_auto_reply_setting(persona_id)
 
                 if mode == "auto" and risk_level == "low":
-                    # Auto-send low-risk replies
                     token_info = ig_token_store.get(persona_id, {})
                     access_token = token_info.get("access_token", "")
                     if access_token:
@@ -126,13 +124,63 @@ async def instagram_webhook(request: Request):
                             commenter_name, comment_text, draft_text, risk_level,
                         )
                 else:
-                    # Draft mode (or high risk): queue for human review
                     interact_service.add_pending_reply(
                         persona_id, ig_comment_id, ig_media_id,
                         commenter_name, comment_text, draft_text, risk_level,
                     )
             except Exception as exc:
                 logger.error("Error processing comment event: %s", exc)
+
+        # ── DM (messaging) events ─────────────────────────────────────────────
+        for messaging in entry.get("messaging", []):
+            sender_igsid = messaging.get("sender", {}).get("id", "")
+            recipient_id = messaging.get("recipient", {}).get("id", "")
+            message_obj = messaging.get("message", {})
+            message_text = message_obj.get("text", "")
+
+            # Skip non-text messages (attachments, read receipts, reactions)
+            if not message_text:
+                continue
+            # Skip echo (messages sent by us)
+            if message_obj.get("is_echo"):
+                continue
+
+            persona_id = _resolve_persona_id(recipient_id)
+
+            try:
+                fan_memory_service.upsert_fan(persona_id, sender_igsid, sender_igsid, message_text)
+            except Exception as fan_exc:
+                logger.warning("Fan memory upsert failed (DM): %s", fan_exc)
+
+            try:
+                draft_text = interact_service.generate_reply_draft(
+                    persona_id, message_text, sender_igsid, fan_id=sender_igsid, channel="dm"
+                )
+                risk_level = interact_service.check_risk(message_text)
+                mode = interact_service.get_auto_reply_setting(persona_id)
+
+                if mode == "auto" and risk_level == "low":
+                    token_info = ig_token_store.get(persona_id, {})
+                    access_token = token_info.get("access_token", "")
+                    if access_token:
+                        draft = interact_service.add_pending_reply(
+                            persona_id, "", "", sender_igsid, message_text,
+                            draft_text, risk_level, channel="dm", sender_igsid=sender_igsid,
+                        )
+                        interact_service.send_dm(draft["reply_id"], access_token)
+                    else:
+                        logger.warning("Auto mode but no access_token for persona_id=%s (DM), queuing as draft", persona_id)
+                        interact_service.add_pending_reply(
+                            persona_id, "", "", sender_igsid, message_text,
+                            draft_text, risk_level, channel="dm", sender_igsid=sender_igsid,
+                        )
+                else:
+                    interact_service.add_pending_reply(
+                        persona_id, "", "", sender_igsid, message_text,
+                        draft_text, risk_level, channel="dm", sender_igsid=sender_igsid,
+                    )
+            except Exception as exc:
+                logger.error("Error processing DM event: %s", exc)
 
     return {"status": "ok"}
 
@@ -171,7 +219,7 @@ class SendReplyBody(BaseModel):
 async def send_reply(reply_id: str, body: SendReplyBody):
     """
     Confirm and send a queued reply draft to Instagram.
-    Looks up the access_token via instagram_service token store.
+    Dispatches to send_dm() or send_reply() based on channel.
     """
     token_info = ig_token_store.get(body.persona_id, {})
     access_token = token_info.get("access_token", "")
@@ -181,12 +229,31 @@ async def send_reply(reply_id: str, body: SendReplyBody):
             detail=f"No Instagram access token found for persona_id={body.persona_id}",
         )
 
-    try:
-        draft = interact_service.send_reply(reply_id, access_token)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    draft = interact_service.pending_replies.get(reply_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail=f"Reply not found: {reply_id}")
+
+    channel = draft.get("channel", "comment")
+
+    if channel == "dm":
+        if interact_service.is_dm_expired(draft["created_at"]):
+            raise HTTPException(
+                status_code=400,
+                detail="此 DM 已超過 24 小時，Meta 不允許主動發送，無法回覆。",
+            )
+        try:
+            draft = interact_service.send_dm(reply_id, access_token)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+    else:
+        try:
+            draft = interact_service.send_reply(reply_id, access_token)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
 
     return {"status": "sent", "reply": draft}
 

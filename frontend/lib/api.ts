@@ -146,8 +146,10 @@ export async function connectWithToken(
 export interface PendingReply {
   reply_id: string
   persona_id: string
+  channel: 'comment' | 'dm'
   ig_comment_id: string
   ig_media_id: string
+  sender_igsid: string
   commenter_name: string
   comment_text: string
   draft_text: string

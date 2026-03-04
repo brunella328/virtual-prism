@@ -15,6 +15,15 @@ import {
 const PERSONA_ID = 'demo'
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function isDmExpired(createdAt: string): boolean {
+  const created = new Date(createdAt)
+  const now = new Date()
+  return (now.getTime() - created.getTime()) > 24 * 60 * 60 * 1000
+}
+
+// ---------------------------------------------------------------------------
 // Mock stats (replace with real API in production)
 // ---------------------------------------------------------------------------
 const MOCK_STATS = {
@@ -32,6 +41,7 @@ export default function EngagePage() {
   const [error, setError] = useState<string | null>(null)
   const [fans, setFans] = useState<FanRecord[]>([])
   const [fansLoading, setFansLoading] = useState(true)
+  const [channelFilter, setChannelFilter] = useState<'all' | 'comment' | 'dm'>('all')
 
   // ── Load mode & replies on mount ──────────────────────────────────────────
   const fetchReplies = useCallback(async () => {
@@ -112,7 +122,13 @@ export default function EngagePage() {
     }
   }
 
+  const filteredReplies = channelFilter === 'all'
+    ? replies
+    : replies.filter(r => r.channel === channelFilter)
+
   const pendingCount = replies.length
+  const commentCount = replies.filter(r => r.channel === 'comment').length
+  const dmCount = replies.filter(r => r.channel === 'dm').length
 
   return (
     <main className="min-h-screen bg-white text-black p-8 max-w-4xl mx-auto">
@@ -179,21 +195,49 @@ export default function EngagePage() {
           </button>
         </div>
 
+        {/* Channel filter tabs */}
+        <div className="flex gap-2 mb-4">
+          {([
+            { key: 'all', label: '全部', count: pendingCount },
+            { key: 'comment', label: '留言', count: commentCount },
+            { key: 'dm', label: '私訊', count: dmCount },
+          ] as const).map(({ key, label, count }) => (
+            <button
+              key={key}
+              onClick={() => setChannelFilter(key)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                channelFilter === key
+                  ? 'bg-black text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {label}
+              {count > 0 && (
+                <span className={`ml-1.5 text-xs ${channelFilter === key ? 'text-gray-300' : 'text-gray-400'}`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {repliesLoading ? (
           <div className="space-y-4">
             {[1, 2].map((i) => (
               <div key={i} className="h-32 bg-gray-100 rounded-xl animate-pulse" />
             ))}
           </div>
-        ) : replies.length === 0 ? (
+        ) : filteredReplies.length === 0 ? (
           <div className="p-10 border border-dashed border-gray-300 rounded-xl text-center text-gray-400">
             <p className="text-2xl mb-2">✅</p>
             <p>目前沒有待確認的回覆</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {replies.map((reply) => {
+            {filteredReplies.map((reply) => {
               const isProcessing = actionInProgress === reply.reply_id
+              const isDm = reply.channel === 'dm'
+              const expired = isDm && isDmExpired(reply.created_at)
               return (
                 <div
                   key={reply.reply_id}
@@ -201,7 +245,14 @@ export default function EngagePage() {
                 >
                   {/* Meta row */}
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-medium text-sm">@{reply.commenter_name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">@{reply.commenter_name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        isDm ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {isDm ? '私訊' : '留言'}
+                      </span>
+                    </div>
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         reply.risk_level === 'high'
@@ -213,9 +264,16 @@ export default function EngagePage() {
                     </span>
                   </div>
 
-                  {/* Original comment */}
+                  {/* 24h expired warning for DMs */}
+                  {expired && (
+                    <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                      ⚠️ 此私訊已超過 24 小時，Meta 限制無法回覆
+                    </div>
+                  )}
+
+                  {/* Original message */}
                   <div className="mb-3">
-                    <p className="text-xs text-gray-400 mb-1">原始留言</p>
+                    <p className="text-xs text-gray-400 mb-1">{isDm ? '原始私訊' : '原始留言'}</p>
                     <p className="text-sm bg-gray-50 rounded-lg p-3 leading-relaxed">
                       {reply.comment_text}
                     </p>
@@ -233,10 +291,10 @@ export default function EngagePage() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleSend(reply.reply_id)}
-                      disabled={isProcessing}
+                      disabled={isProcessing || expired}
                       className="flex-1 py-2 bg-black text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      {isProcessing ? '處理中…' : '發送'}
+                      {isProcessing ? '處理中…' : expired ? '已過期' : '發送'}
                     </button>
                     <button
                       onClick={() => handleDismiss(reply.reply_id)}

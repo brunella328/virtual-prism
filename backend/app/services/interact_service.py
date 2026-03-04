@@ -138,11 +138,24 @@ def query_persona_context(persona_id: str, query_text: str, top_k: int = 3) -> l
 # Reply Draft Generation (Claude API)
 # ---------------------------------------------------------------------------
 
+def is_dm_expired(created_at_iso: str) -> bool:
+    """Return True if the DM is older than 24 hours (outside the messaging window)."""
+    from datetime import timedelta
+    try:
+        created = datetime.fromisoformat(created_at_iso)
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - created > timedelta(hours=24)
+    except Exception:
+        return False
+
+
 def generate_reply_draft(
     persona_id: str,
     comment_text: str,
     commenter_name: str,
     fan_id: str = "",
+    channel: str = "comment",
 ) -> str:
     """
     Generate a reply draft using Claude that matches the persona's voice.
@@ -160,17 +173,22 @@ def generate_reply_draft(
     fan_context = fan_memory_service.get_fan_context(persona_id, fan_id) if fan_id else ""
     fan_section = f"\n粉絲資訊：{fan_context}" if fan_context else ""
 
+    if channel == "dm":
+        interaction_context = f"有一位名叫「{commenter_name}」的粉絲傳了 Instagram 私訊（DM）給你：\n「{comment_text}」"
+        tone_note = "- 語氣比公開留言更私密、更個人化，像是朋友間的對話\n- 不超過 100 字"
+    else:
+        interaction_context = f"有一位名叫「{commenter_name}」的粉絲在 Instagram 留言：\n「{comment_text}」"
+        tone_note = "- 親切自然，不能太正式或太生硬\n- 不超過 150 字"
+
     prompt = f"""你是一個 AI 虛擬網紅，以下是你的人設資料：
 
 {persona_context}{fan_section}
 
-有一位名叫「{commenter_name}」的粉絲在 Instagram 留言：
-「{comment_text}」
+{interaction_context}
 
 請根據你的人設，以符合你個性和語氣的方式，撰寫一則回覆給這位粉絲。
 要求：
-- 親切自然，不能太正式或太生硬
-- 不超過 150 字
+{tone_note}
 - 可以加入適當的 emoji
 - 若粉絲資訊中有 username，可以在回覆中叫出粉絲名字，讓回覆更個人化
 - 只輸出回覆內容本身，不要加任何說明或前言"""
@@ -202,8 +220,10 @@ def generate_reply_draft(
 class ReplyDraft(TypedDict):
     reply_id: str
     persona_id: str
+    channel: str          # "comment" | "dm"
     ig_comment_id: str
     ig_media_id: str
+    sender_igsid: str     # DM 專用：sender 的 IGSID（comment 留空）
     commenter_name: str
     comment_text: str
     draft_text: str
@@ -227,14 +247,18 @@ def add_pending_reply(
     comment_text: str,
     draft_text: str,
     risk_level: str,
+    channel: str = "comment",
+    sender_igsid: str = "",
 ) -> ReplyDraft:
     """Add a new reply draft to the pending store."""
     reply_id = str(uuid.uuid4())
     draft: ReplyDraft = {
         "reply_id": reply_id,
         "persona_id": persona_id,
+        "channel": channel,
         "ig_comment_id": ig_comment_id,
         "ig_media_id": ig_media_id,
+        "sender_igsid": sender_igsid,
         "commenter_name": commenter_name,
         "comment_text": comment_text,
         "draft_text": draft_text,
@@ -284,6 +308,37 @@ def send_reply(reply_id: str, access_token: str) -> ReplyDraft:
     except Exception as exc:
         logger.error("Failed to send reply to IG: %s", exc)
         raise RuntimeError(f"IG API error: {exc}") from exc
+
+    draft["status"] = "sent"
+    return draft
+
+
+def send_dm(reply_id: str, access_token: str) -> ReplyDraft:
+    """
+    Send a DM reply via Instagram Graph API, then mark as sent.
+    IG API: POST https://graph.instagram.com/v18.0/me/messages
+    Requires: instagram_business_manage_messages scope.
+    """
+    draft = pending_replies.get(reply_id)
+    if not draft:
+        raise ValueError(f"Reply not found: {reply_id}")
+    if draft["status"] != "pending":
+        raise ValueError(f"Reply is not in pending state: {draft['status']}")
+
+    sender_igsid = draft["sender_igsid"]
+    message_text = draft["draft_text"]
+
+    url = "https://graph.instagram.com/v18.0/me/messages"
+    try:
+        resp = requests.post(url, json={
+            "recipient": {"id": sender_igsid},
+            "message": {"text": message_text},
+        }, params={"access_token": access_token}, timeout=15)
+        resp.raise_for_status()
+        logger.info("Sent DM for reply_id=%s sender_igsid=%s", reply_id, sender_igsid)
+    except Exception as exc:
+        logger.error("Failed to send DM to IG: %s", exc)
+        raise RuntimeError(f"IG DM API error: {exc}") from exc
 
     draft["status"] = "sent"
     return draft
