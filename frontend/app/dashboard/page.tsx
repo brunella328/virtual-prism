@@ -360,6 +360,62 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {/* Scheduled posts list */}
+            {(() => {
+              const scheduledPosts = schedule
+                .filter(s => s.status === 'scheduled' && (s.scheduled_at || s.scheduledAt))
+                .sort((a, b) => (a.scheduled_at || a.scheduledAt || '').localeCompare(b.scheduled_at || b.scheduledAt || ''))
+              if (scheduledPosts.length === 0) return null
+              return (
+                <div className="border rounded-2xl overflow-hidden">
+                  <div className="px-4 py-2.5 bg-purple-50 border-b flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />
+                    <p className="text-sm font-semibold text-purple-800">即將發布 ({scheduledPosts.length})</p>
+                  </div>
+                  <div className="divide-y">
+                    {scheduledPosts.map(post => (
+                      <button
+                        key={post.post_id}
+                        onClick={() => {
+                          setSelectedPost(post)
+                          setEditMode(false)
+                          setConfirmPublish(false)
+                          setScheduleTime('')
+                          setRegenInstruction('')
+                          setCalendarFocusDate(post.date)
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                          selectedItem?.post_id === post.post_id ? 'bg-gray-50' : ''
+                        }`}
+                      >
+                        {/* Thumbnail */}
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                          {post.image_url
+                            ? <img src={post.image_url} alt={post.scene} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center text-gray-300 text-lg">🖼️</div>}
+                        </div>
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{post.caption}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{post.date}</p>
+                        </div>
+                        {/* Scheduled time */}
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-xs font-medium text-purple-700">
+                            {new Date(post.scheduled_at || post.scheduledAt!).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })}
+                          </p>
+                          <p className="text-xs text-purple-500">
+                            {new Date(post.scheduled_at || post.scheduledAt!).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <span className="text-gray-300 flex-shrink-0">›</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
             <MonthCalendar
               schedule={filteredSchedule}
               focusDate={calendarFocusDate}
