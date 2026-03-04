@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   getPendingReplies,
   sendReply,
@@ -11,8 +12,7 @@ import {
   type PendingReply,
   type FanRecord,
 } from '@/lib/api'
-
-const PERSONA_ID = 'demo'
+import { useUser } from '@/contexts/UserContext'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,6 +33,8 @@ const MOCK_STATS = {
 }
 
 export default function EngagePage() {
+  const router = useRouter()
+  const { userId, isAuthenticated, isLoading } = useUser()
   const [mode, setMode] = useState<'draft' | 'auto'>('draft')
   const [modeLoading, setModeLoading] = useState(false)
   const [replies, setReplies] = useState<PendingReply[]>([])
@@ -43,35 +45,43 @@ export default function EngagePage() {
   const [fansLoading, setFansLoading] = useState(true)
   const [channelFilter, setChannelFilter] = useState<'all' | 'comment' | 'dm'>('all')
 
+  // ── Redirect if not authenticated ─────────────────────────────────────────
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) router.push('/onboarding')
+  }, [isLoading, isAuthenticated, router])
+
   // ── Load mode & replies on mount ──────────────────────────────────────────
   const fetchReplies = useCallback(async () => {
+    if (!userId) return
     setRepliesLoading(true)
     try {
-      const data = await getPendingReplies(PERSONA_ID)
+      const data = await getPendingReplies(userId)
       setReplies(data.replies)
     } catch {
       setError('無法載入待確認回覆，請稍後再試。')
     } finally {
       setRepliesLoading(false)
     }
-  }, [])
+  }, [userId])
 
   const fetchFans = useCallback(async () => {
+    if (!userId) return
     setFansLoading(true)
     try {
-      const data = await getFanList(PERSONA_ID)
+      const data = await getFanList(userId)
       setFans(data.fans)
     } catch {
       // silently fail — empty state will show
     } finally {
       setFansLoading(false)
     }
-  }, [])
+  }, [userId])
 
   useEffect(() => {
+    if (!userId) return
     async function init() {
       try {
-        const setting = await getAutoReplySetting(PERSONA_ID)
+        const setting = await getAutoReplySetting(userId!)
         setMode(setting.mode)
       } catch {
         // default to 'draft' on error
@@ -80,14 +90,15 @@ export default function EngagePage() {
       await fetchFans()
     }
     init()
-  }, [fetchReplies, fetchFans])
+  }, [userId, fetchReplies, fetchFans])
 
   // ── Toggle mode ───────────────────────────────────────────────────────────
   async function handleToggleMode() {
+    if (!userId) return
     const newMode = mode === 'draft' ? 'auto' : 'draft'
     setModeLoading(true)
     try {
-      await setAutoReplySetting(PERSONA_ID, newMode)
+      await setAutoReplySetting(userId, newMode)
       setMode(newMode)
     } catch {
       setError('設定更新失敗，請重試。')
@@ -98,9 +109,10 @@ export default function EngagePage() {
 
   // ── Send reply ─────────────────────────────────────────────────────────────
   async function handleSend(replyId: string) {
+    if (!userId) return
     setActionInProgress(replyId)
     try {
-      await sendReply(replyId, PERSONA_ID)
+      await sendReply(replyId, userId)
       setReplies((prev) => prev.filter((r) => r.reply_id !== replyId))
     } catch {
       setError('發送失敗，請確認 Instagram 帳號已連結。')
