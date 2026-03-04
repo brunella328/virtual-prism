@@ -96,11 +96,15 @@ def get_post(persona_id: str, post_id: str) -> Optional[dict]:
 
 
 def update_post_fields(persona_id: str, post_id: str, **kwargs) -> bool:
-    """通用欄位更新（可一次更新多個欄位）。回傳是否找到並更新。"""
+    """通用欄位更新（可一次更新多個欄位）。value=None 表示刪除該欄位。"""
     posts = load_schedule(persona_id)
     for post in posts:
         if post.get("post_id") == post_id:
-            post.update(kwargs)
+            for k, v in kwargs.items():
+                if v is None:
+                    post.pop(k, None)
+                else:
+                    post[k] = v
             save_schedule(persona_id, posts)
             return True
     return False

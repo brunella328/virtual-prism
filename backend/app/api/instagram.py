@@ -224,10 +224,13 @@ async def list_schedule(persona_id: str = Query(...)):
 
 @router.delete("/schedule/{job_id}")
 async def cancel_schedule(job_id: str):
-    """Cancel a scheduled post by job ID."""
-    removed = svc.cancel_scheduled_post(job_id)
-    if not removed:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found or already executed.")
+    """Cancel a scheduled post by job ID.
+    Idempotent: if the job is already gone (server restart, etc.) we still
+    mark the post as cancelled in storage so the UI stays consistent.
+    """
+    svc.cancel_scheduled_post(job_id)   # best-effort; True or False is OK
+    # Clear schedule fields in storage for any post carrying this job_id
+    svc.clear_schedule_by_job_id(job_id)
     return {"cancelled": True, "job_id": job_id}
 
 

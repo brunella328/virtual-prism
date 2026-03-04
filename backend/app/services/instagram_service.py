@@ -747,3 +747,27 @@ def cancel_scheduled_post(job_id: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def clear_schedule_by_job_id(job_id: str) -> None:
+    """Scan all persona schedules and clear scheduling fields for any post
+    that carries this job_id.  Called after cancellation (including orphaned jobs)."""
+    from app.services.schedule_storage import STORAGE_DIR, load_schedule, update_post_fields
+    if not STORAGE_DIR.is_dir():
+        return
+    for fname in STORAGE_DIR.iterdir():
+        if fname.suffix != ".json":
+            continue
+        persona_id = fname.stem
+        posts = load_schedule(persona_id)
+        for post in posts:
+            if post.get("job_id") == job_id:
+                update_post_fields(
+                    persona_id, post["post_id"],
+                    status="draft",
+                    scheduled_at=None,
+                    job_id=None,
+                )
+                logger.info("Cleared orphaned job_id=%s for post_id=%s persona_id=%s",
+                            job_id, post["post_id"], persona_id)
+                return
