@@ -112,10 +112,6 @@ export default function DashboardPage() {
           if (selectId) {
             const target = posts.find((p: DayContent) => p.post_id === selectId)
             if (target) { setSelectedPost(target); setCalendarFocusDate(target.date) }
-          } else {
-            const todayStr = new Date().toISOString().slice(0, 10)
-            const todayPost = posts.find((p: DayContent) => p.date === todayStr)
-            if (todayPost) setSelectedPost(todayPost)
           }
           setLoading(false)
         } else {
