@@ -380,187 +380,210 @@ export default function DashboardPage() {
               }}
             />
 
-            {/* Regen confirm */}
-            {pendingRegen && (
-              <div className="border-2 border-yellow-300 rounded-2xl p-5 bg-yellow-50 space-y-4">
-                <p className="font-semibold text-sm text-yellow-800">重繪完成 — 確認是否套用新圖片？</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-xs text-gray-400 text-center">原圖</p>
-                    <div className="aspect-square rounded-xl overflow-hidden bg-gray-100">
-                      {schedule.find(s => s.post_id === pendingRegen.post_id)?.image_url
-                        ? <img src={schedule.find(s => s.post_id === pendingRegen.post_id)!.image_url} alt="原圖" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center text-3xl">🖼️</div>}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-gray-400 text-center">新圖</p>
-                    <div className="aspect-square rounded-xl overflow-hidden bg-gray-100">
-                      <img src={pendingRegen.image_url} alt="新圖" className="w-full h-full object-cover" />
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={handleApplyRegen} className="flex-1 bg-black text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800">套用新圖</button>
-                  <button onClick={() => setPendingRegen(null)} className="flex-1 border py-2.5 rounded-xl text-sm hover:bg-gray-50">捨棄</button>
-                </div>
-              </div>
-            )}
-
-            {/* Post detail panel */}
-            {selectedItem && (
-              <div className="border rounded-2xl p-6 bg-white space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-bold text-lg">{selectedItem.scene}</h3>
-                    <p className="text-sm text-gray-400">{selectedItem.date}</p>
-                  </div>
-                  <span className={`text-sm px-3 py-1 rounded-full ${STATUS_BADGE[selectedItem.status]}`}>
-                    {STATUS_LABEL[selectedItem.status]}
-                  </span>
-                </div>
-
-                {/* Image */}
-                <div className="aspect-square max-w-sm mx-auto rounded-xl bg-gray-100 overflow-hidden relative">
-                  {selectedItem.image_url
-                    ? <img src={selectedItem.image_url} alt={selectedItem.scene} className="w-full h-full object-cover" />
-                    : <div className="w-full h-full flex items-center justify-center text-5xl">🖼️</div>}
-                  {selectedItem.status === 'regenerating' && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <div className="text-white text-3xl animate-spin">🔄</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Caption */}
-                {editMode ? (
-                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">貼文文案</label>
-                      <textarea value={editCaption} onChange={e => setEditCaption(e.target.value)} rows={4}
-                        className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">重繪方向（scene prompt）</label>
-                      <textarea value={editScenePrompt} onChange={e => setEditScenePrompt(e.target.value)} rows={3}
-                        placeholder="描述畫面場景與氛圍，重繪時會使用此內容..."
-                        className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none" />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={async () => {
-                          setSaving(true)
-                          await handleSaveContent(selectedItem.post_id, editCaption, editScenePrompt)
-                          setSaving(false)
-                          setEditMode(false)
-                        }}
-                        disabled={saving}
-                        className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40"
-                      >{saving ? '儲存中...' : '儲存'}</button>
-                      <button onClick={() => setEditMode(false)} disabled={saving}
-                        className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-gray-50 rounded-xl p-4 relative">
-                    <button
-                      onClick={() => { setEditCaption(selectedItem.caption); setEditScenePrompt(selectedItem.scene_prompt || ''); setEditMode(true) }}
-                      className="absolute top-3 right-3 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
-                    >✏️ 編輯</button>
-                    <p className="text-sm pr-12">{selectedItem.caption}</p>
-                    {selectedItem.hashtags && (
-                      <p className="text-xs text-blue-500 mt-2">{selectedItem.hashtags.join(' ')}</p>
-                    )}
-                  </div>
-                )}
-
-                {/* Regen */}
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input value={regenInstruction} onChange={e => setRegenInstruction(e.target.value)}
-                      placeholder="重繪指令（選填）：修復手指、改為戶外..."
-                      className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
-                      disabled={selectedItem.status === 'regenerating'} />
-                    <button
-                      onClick={() => { handleRegenerate(selectedItem.post_id, regenInstruction); setRegenInstruction('') }}
-                      disabled={selectedItem.status === 'regenerating'}
-                      className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40"
-                    >🔄 重繪</button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="flex-1 border border-dashed border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-pointer hover:bg-gray-50 text-center">
-                      {regenRefPreview
-                        ? <img src={regenRefPreview} alt="參考圖" className="h-10 mx-auto object-contain rounded" />
-                        : '上傳參考圖（選填）'}
-                      <input type="file" accept="image/*" className="hidden"
-                        disabled={selectedItem.status === 'regenerating'}
-                        onChange={e => {
-                          const f = e.target.files?.[0] || null
-                          setRegenRefImage(f)
-                          setRegenRefPreview(f ? URL.createObjectURL(f) : null)
-                        }} />
-                    </label>
-                    {regenRefImage && (
-                      <button onClick={() => { setRegenRefImage(null); setRegenRefPreview(null) }}
-                        className="text-xs text-gray-400 hover:text-red-500">✕</button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Publish (IG connected only) */}
-                {igConnected && selectedItem.status !== 'regenerating' && (
-                  <div className="border-t pt-4 space-y-3">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">發布</p>
-                    {(selectedItem.scheduledAt || selectedItem.scheduled_at) ? (
-                      <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3">
-                        <div>
-                          <p className="text-sm font-medium text-blue-800">已排程</p>
-                          <p className="text-xs text-blue-600">
-                            {new Date(selectedItem.scheduledAt || selectedItem.scheduled_at!).toLocaleString('zh-TW')}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        {confirmPublish ? (
-                          <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
-                            <p className="text-sm font-medium">確認立即發布到 Instagram？</p>
-                            {selectedItem.image_url && <img src={selectedItem.image_url} alt="" className="w-24 h-24 object-cover rounded-lg" />}
-                            <p className="text-xs text-gray-500 line-clamp-2">{selectedItem.caption}</p>
-                            <div className="flex gap-2">
-                              <button onClick={() => handlePublishNow(selectedItem.post_id)}
-                                disabled={publishing}
-                                className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60">
-                                {publishing ? '發布中...' : '確認發布'}
-                              </button>
-                              <button onClick={() => setConfirmPublish(false)}
-                                disabled={publishing}
-                                className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button onClick={() => setConfirmPublish(true)}
-                            className="w-full border py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">立即發布</button>
-                        )}
-                        <div className="flex gap-2 items-center">
-                          <input type="datetime-local" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)}
-                            min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                          <button
-                            onClick={() => { if (scheduleTime) { handleSchedulePost(selectedItem.post_id, scheduleTime); setScheduleTime('') } }}
-                            disabled={!scheduleTime}
-                            className="px-4 py-2 bg-black text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-40"
-                          >排程</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
       </main>
+
+      {/* Post detail modal (bottom sheet) */}
+      {selectedItem && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={() => { setSelectedPost(null); setEditMode(false); setConfirmPublish(false) }}
+          />
+          {/* Sheet */}
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto">
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-gray-200" />
+            </div>
+
+            {/* Header */}
+            <div className="flex justify-between items-start px-6 pt-3 pb-2">
+              <div>
+                <h3 className="font-bold text-lg">{selectedItem.scene}</h3>
+                <p className="text-sm text-gray-400">{selectedItem.date}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-sm px-3 py-1 rounded-full ${STATUS_BADGE[selectedItem.status]}`}>
+                  {STATUS_LABEL[selectedItem.status]}
+                </span>
+                <button
+                  onClick={() => { setSelectedPost(null); setEditMode(false); setConfirmPublish(false) }}
+                  className="text-gray-400 hover:text-gray-700 text-xl leading-none ml-1"
+                >✕</button>
+              </div>
+            </div>
+
+            <div className="px-6 pb-10 space-y-4">
+              {/* Image */}
+              <div className="aspect-square max-w-sm mx-auto rounded-xl bg-gray-100 overflow-hidden relative">
+                {selectedItem.image_url
+                  ? <img src={selectedItem.image_url} alt={selectedItem.scene} className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-5xl">🖼️</div>}
+                {selectedItem.status === 'regenerating' && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <div className="text-white text-3xl animate-spin">🔄</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Caption */}
+              {editMode ? (
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">貼文文案</label>
+                    <textarea value={editCaption} onChange={e => setEditCaption(e.target.value)} rows={4}
+                      className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">重繪方向（scene prompt）</label>
+                    <textarea value={editScenePrompt} onChange={e => setEditScenePrompt(e.target.value)} rows={3}
+                      placeholder="描述畫面場景與氛圍，重繪時會使用此內容..."
+                      className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        setSaving(true)
+                        await handleSaveContent(selectedItem.post_id, editCaption, editScenePrompt)
+                        setSaving(false)
+                        setEditMode(false)
+                      }}
+                      disabled={saving}
+                      className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-40"
+                    >{saving ? '儲存中...' : '儲存'}</button>
+                    <button onClick={() => setEditMode(false)} disabled={saving}
+                      className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-xl p-4 relative">
+                  <button
+                    onClick={() => { setEditCaption(selectedItem.caption); setEditScenePrompt(selectedItem.scene_prompt || ''); setEditMode(true) }}
+                    className="absolute top-3 right-3 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
+                  >✏️ 編輯</button>
+                  <p className="text-sm pr-12">{selectedItem.caption}</p>
+                  {selectedItem.hashtags && (
+                    <p className="text-xs text-blue-500 mt-2">{selectedItem.hashtags.join(' ')}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Regen */}
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input value={regenInstruction} onChange={e => setRegenInstruction(e.target.value)}
+                    placeholder="重繪指令（選填）：修復手指、改為戶外..."
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    disabled={selectedItem.status === 'regenerating'} />
+                  <button
+                    onClick={() => { handleRegenerate(selectedItem.post_id, regenInstruction); setRegenInstruction('') }}
+                    disabled={selectedItem.status === 'regenerating'}
+                    className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40"
+                  >🔄 重繪</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="flex-1 border border-dashed border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-400 cursor-pointer hover:bg-gray-50 text-center">
+                    {regenRefPreview
+                      ? <img src={regenRefPreview} alt="參考圖" className="h-10 mx-auto object-contain rounded" />
+                      : '上傳參考圖（選填）'}
+                    <input type="file" accept="image/*" className="hidden"
+                      disabled={selectedItem.status === 'regenerating'}
+                      onChange={e => {
+                        const f = e.target.files?.[0] || null
+                        setRegenRefImage(f)
+                        setRegenRefPreview(f ? URL.createObjectURL(f) : null)
+                      }} />
+                  </label>
+                  {regenRefImage && (
+                    <button onClick={() => { setRegenRefImage(null); setRegenRefPreview(null) }}
+                      className="text-xs text-gray-400 hover:text-red-500">✕</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Regen confirm (embedded) */}
+              {pendingRegen && pendingRegen.post_id === selectedItem.post_id && (
+                <div className="border-2 border-yellow-300 rounded-2xl p-5 bg-yellow-50 space-y-4">
+                  <p className="font-semibold text-sm text-yellow-800">重繪完成 — 確認是否套用新圖片？</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-400 text-center">原圖</p>
+                      <div className="aspect-square rounded-xl overflow-hidden bg-gray-100">
+                        {schedule.find(s => s.post_id === pendingRegen.post_id)?.image_url
+                          ? <img src={schedule.find(s => s.post_id === pendingRegen.post_id)!.image_url} alt="原圖" className="w-full h-full object-cover" />
+                          : <div className="w-full h-full flex items-center justify-center text-3xl">🖼️</div>}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-400 text-center">新圖</p>
+                      <div className="aspect-square rounded-xl overflow-hidden bg-gray-100">
+                        <img src={pendingRegen.image_url} alt="新圖" className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={handleApplyRegen} className="flex-1 bg-black text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800">套用新圖</button>
+                    <button onClick={() => setPendingRegen(null)} className="flex-1 border py-2.5 rounded-xl text-sm hover:bg-gray-50">捨棄</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Publish (IG connected only) */}
+              {igConnected && selectedItem.status !== 'regenerating' && (
+                <div className="border-t pt-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">發布</p>
+                  {(selectedItem.scheduledAt || selectedItem.scheduled_at) ? (
+                    <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-blue-800">已排程</p>
+                        <p className="text-xs text-blue-600">
+                          {new Date(selectedItem.scheduledAt || selectedItem.scheduled_at!).toLocaleString('zh-TW')}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {confirmPublish ? (
+                        <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
+                          <p className="text-sm font-medium">確認立即發布到 Instagram？</p>
+                          {selectedItem.image_url && <img src={selectedItem.image_url} alt="" className="w-24 h-24 object-cover rounded-lg" />}
+                          <p className="text-xs text-gray-500 line-clamp-2">{selectedItem.caption}</p>
+                          <div className="flex gap-2">
+                            <button onClick={() => handlePublishNow(selectedItem.post_id)}
+                              disabled={publishing}
+                              className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60">
+                              {publishing ? '發布中...' : '確認發布'}
+                            </button>
+                            <button onClick={() => setConfirmPublish(false)}
+                              disabled={publishing}
+                              className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmPublish(true)}
+                          className="w-full border py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">立即發布</button>
+                      )}
+                      <div className="flex gap-2 items-center">
+                        <input type="datetime-local" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)}
+                          min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+                        <button
+                          onClick={() => { if (scheduleTime) { handleSchedulePost(selectedItem.post_id, scheduleTime); setScheduleTime('') } }}
+                          disabled={!scheduleTime}
+                          className="px-4 py-2 bg-black text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-40"
+                        >排程</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Add post modal */}
       {addPostDate && (
