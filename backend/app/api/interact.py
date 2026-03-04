@@ -31,9 +31,6 @@ router = APIRouter()
 # Webhook — GET (hub verification) & POST (events)
 # ---------------------------------------------------------------------------
 
-WEBHOOK_VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "")
-
-
 @router.get("/webhook/instagram")
 async def instagram_webhook_verify(
     hub_mode: str = Query(None, alias="hub.mode"),
@@ -44,7 +41,8 @@ async def instagram_webhook_verify(
     Handle IG Webhook hub verification (GET).
     Returns hub.challenge value when verify token matches.
     """
-    if hub_mode == "subscribe" and hub_verify_token == WEBHOOK_VERIFY_TOKEN:
+    verify_token = os.getenv("WEBHOOK_VERIFY_TOKEN", "")
+    if hub_mode == "subscribe" and hub_verify_token == verify_token:
         return PlainTextResponse(content=hub_challenge or "")
     raise HTTPException(status_code=403, detail="Webhook verification failed")
 
