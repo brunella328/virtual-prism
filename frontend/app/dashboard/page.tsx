@@ -8,7 +8,7 @@ import AddPostModal from '@/components/life-stream/AddPostModal'
 import Navbar from '@/components/Navbar'
 import ToastContainer from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
-import { getInstagramStatus, publishNow, scheduleInstagramPosts } from '@/lib/api'
+import { getInstagramStatus, publishNow, scheduleInstagramPosts, cancelScheduledPost } from '@/lib/api'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -316,6 +316,28 @@ export default function DashboardPage() {
     }
   }
 
+  // Cancel schedule
+  const handleCancelSchedule = async (post_id: string, job_id: string) => {
+    try {
+      await cancelScheduledPost(job_id)
+      setSchedule(prev => {
+        const updated = prev.map(s => s.post_id === post_id
+          ? { ...s, status: 'draft' as const, scheduled_at: undefined, scheduledAt: undefined, job_id: undefined }
+          : s)
+        storage.setSchedule(updated)
+        return updated
+      })
+      fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'draft' }),
+      }).catch(() => {})
+      addToast('已取消排程', 'success')
+    } catch (e) {
+      addToast(`取消失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
+  }
+
   return (
     <>
       <Navbar />
@@ -536,13 +558,21 @@ export default function DashboardPage() {
                 <div className="border-t pt-4 space-y-3">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">發布</p>
                   {(selectedItem.scheduledAt || selectedItem.scheduled_at) ? (
-                    <div className="flex items-center justify-between bg-blue-50 rounded-xl px-4 py-3">
+                    <div className="flex items-center justify-between bg-purple-50 rounded-xl px-4 py-3">
                       <div>
-                        <p className="text-sm font-medium text-blue-800">已排程</p>
-                        <p className="text-xs text-blue-600">
+                        <p className="text-sm font-medium text-purple-800">待發布</p>
+                        <p className="text-xs text-purple-600">
                           {new Date(selectedItem.scheduledAt || selectedItem.scheduled_at!).toLocaleString('zh-TW')}
                         </p>
                       </div>
+                      {selectedItem.job_id && (
+                        <button
+                          onClick={() => handleCancelSchedule(selectedItem.post_id, selectedItem.job_id!)}
+                          className="text-xs text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          取消排程
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <>

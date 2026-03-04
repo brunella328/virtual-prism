@@ -19,6 +19,7 @@ export interface DayContent {
   hashtags?: string[]
   scheduledAt?: string
   scheduled_at?: string   // backend field name (snake_case)
+  job_id?: string
 }
 
 interface MonthCalendarProps {
