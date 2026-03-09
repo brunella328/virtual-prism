@@ -29,7 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function DashboardPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { userId, isAuthenticated, isLoading, appearancePrompt } = useUser()
+  const { userId, isAuthenticated, isLoading, appearancePrompt, hasIgToken } = useUser()
   const { toasts, addToast, removeToast } = useToast()
 
   // Schedule state
@@ -261,6 +261,35 @@ export default function DashboardPage() {
       addToast('已儲存 ✓', 'success')
     } catch (e) {
       addToast(`儲存失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
+  }
+
+  // Web Share
+  const handleWebShare = async (post_id: string) => {
+    const item = schedule.find(s => s.post_id === post_id)
+    if (!item?.image_url) { addToast('缺少圖片', 'error'); return }
+    try {
+      const response = await fetch(item.image_url)
+      const blob = await response.blob()
+      const file = new File([blob], 'virtual-prism-post.jpg', { type: blob.type || 'image/jpeg' })
+      const shareData = { files: [file], text: item.caption }
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData)
+        addToast('已開啟分享', 'success')
+      } else {
+        // Fallback: download
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'virtual-prism-post.jpg'
+        a.click()
+        URL.revokeObjectURL(url)
+        addToast('圖片已下載，請手動上傳到社交平台', 'success')
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name !== 'AbortError') {
+        addToast(`分享失敗：${e.message}`, 'error')
+      }
     }
   }
 
@@ -572,36 +601,49 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     <>
-                      {confirmPublish ? (
-                        <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
-                          <p className="text-sm font-medium">確認立即發布到 Instagram？</p>
-                          {selectedItem.image_url && <img src={selectedItem.image_url} alt="" className="w-24 h-24 object-cover rounded-lg" />}
-                          <p className="text-xs text-gray-500 line-clamp-2">{selectedItem.caption}</p>
-                          <div className="flex gap-2">
-                            <button onClick={() => handlePublishNow(selectedItem.post_id)}
-                              disabled={publishing}
-                              className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60">
-                              {publishing ? '發布中...' : '確認發布'}
-                            </button>
-                            <button onClick={() => setConfirmPublish(false)}
-                              disabled={publishing}
-                              className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
+                      {/* Web Share（主要動作） */}
+                      <button
+                        onClick={() => handleWebShare(selectedItem.post_id)}
+                        className="w-full bg-black text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800"
+                      >
+                        分享到社交平台
+                      </button>
+
+                      {/* IG 直發（僅在已連結 IG 時顯示） */}
+                      {hasIgToken && (
+                        <>
+                          {confirmPublish ? (
+                            <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
+                              <p className="text-sm font-medium">確認立即發布到 Instagram？</p>
+                              {selectedItem.image_url && <img src={selectedItem.image_url} alt="" className="w-24 h-24 object-cover rounded-lg" />}
+                              <p className="text-xs text-gray-500 line-clamp-2">{selectedItem.caption}</p>
+                              <div className="flex gap-2">
+                                <button onClick={() => handlePublishNow(selectedItem.post_id)}
+                                  disabled={publishing}
+                                  className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60">
+                                  {publishing ? '發布中...' : '確認發布'}
+                                </button>
+                                <button onClick={() => setConfirmPublish(false)}
+                                  disabled={publishing}
+                                  className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => setConfirmPublish(true)}
+                              className="w-full border py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">直接發布到 Instagram</button>
+                          )}
+                          <div className="flex gap-2 items-center">
+                            <input type="datetime-local" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)}
+                              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+                            <button
+                              onClick={() => { if (scheduleTime) { handleSchedulePost(selectedItem.post_id, scheduleTime); setScheduleTime('') } }}
+                              disabled={!scheduleTime}
+                              className="px-4 py-2 bg-black text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-40"
+                            >排程</button>
                           </div>
-                        </div>
-                      ) : (
-                        <button onClick={() => setConfirmPublish(true)}
-                          className="w-full border py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">立即發布</button>
+                        </>
                       )}
-                      <div className="flex gap-2 items-center">
-                        <input type="datetime-local" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)}
-                          min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                        <button
-                          onClick={() => { if (scheduleTime) { handleSchedulePost(selectedItem.post_id, scheduleTime); setScheduleTime('') } }}
-                          disabled={!scheduleTime}
-                          className="px-4 py-2 bg-black text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-40"
-                        >排程</button>
-                      </div>
                     </>
                   )}
                 </div>

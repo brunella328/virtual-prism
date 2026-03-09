@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@/contexts/UserContext'
-import { connectWithToken } from '@/lib/api'
 import { storage } from '@/lib/storage'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -29,20 +28,15 @@ interface PersonaResult {
   }
 }
 
-type Step = 'connect' | 'input' | 'analyzing' | 'done'
+type Step = 'input' | 'analyzing' | 'done'
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { userId, connect, setAppearancePrompt } = useUser()
+  const { userId, isLoading, setAppearancePrompt } = useUser()
 
-  const [step, setStep] = useState<Step>('connect')
+  const [step, setStep] = useState<Step>('input')
 
-  // Step 1 — IG Token
-  const [tokenInput, setTokenInput] = useState('')
-  const [tokenLoading, setTokenLoading] = useState(false)
-  const [tokenError, setTokenError] = useState('')
-
-  // Step 2 — 人設輸入
+  // Step 1 — 人設輸入
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<FileList | null>(null)
   const [previews, setPreviews] = useState<string[]>([])
@@ -53,11 +47,11 @@ export default function OnboardingPage() {
   const [editedPersona, setEditedPersona] = useState<PersonaResult['persona'] | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // 頁面載入：依 context 決定起始 step
+  // 頁面載入：未登入導向 /login；否則嘗試讀取既有人設
   useEffect(() => {
-    if (!userId) { setStep('connect'); return }
+    if (isLoading) return
+    if (!userId) { router.push('/login'); return }
 
-    // 已連結 IG，嘗試從後端讀取既有人設
     fetch(`${API}/api/genesis/persona/${userId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -76,80 +70,7 @@ export default function OnboardingPage() {
         }
       })
       .catch(() => setStep('input'))
-  }, [userId])
-
-  // ── Step 1：連結 IG ──────────────────────────────────────────────────────
-  const handleConnectToken = async () => {
-    if (!tokenInput.trim()) { setTokenError('請輸入 Access Token'); return }
-    setTokenLoading(true)
-    setTokenError('')
-    try {
-      const result = await connectWithToken('temp', tokenInput.trim())
-      // connect() 同時更新 React context 與 localStorage
-      connect(result.ig_account_id, result.ig_username)
-      setTokenInput('')
-      setStep('input')
-    } catch (e) {
-      setTokenError(e instanceof Error ? e.message : '連結失敗，請確認 Token 是否有效')
-    } finally {
-      setTokenLoading(false)
-    }
-  }
-
-  if (step === 'connect') return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-8 max-w-md mx-auto">
-      <h1 className="text-3xl font-bold mb-2">Virtual Prism 🌈</h1>
-      <p className="text-gray-500 mb-8 text-center">連結你的 Instagram 帳號，開始創建 AI 網紅</p>
-
-      {/* OAuth 登入按鈕 */}
-      <div className="w-full p-6 border-2 border-black rounded-2xl bg-white space-y-3">
-        <h2 className="text-lg font-semibold">連結 Instagram 帳號</h2>
-        <p className="text-sm text-gray-500">點擊下方按鈕，透過 Instagram 官方授權流程登入</p>
-        <button
-          onClick={async () => {
-            try {
-              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/instagram/auth?persona_id=temp`)
-              const data = await res.json()
-              if (data.auth_url) window.location.href = data.auth_url
-              else alert('無法取得授權連結，請確認後端設定')
-            } catch {
-              alert('連線失敗，請確認後端是否運行中')
-            }
-          }}
-          className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:opacity-90 font-medium flex items-center justify-center gap-2"
-        >
-          <span>📷</span> 用 Instagram 帳號登入
-        </button>
-      </div>
-
-      {/* Token 手動輸入（進階） */}
-      <details className="w-full mt-3">
-        <summary className="text-xs text-gray-400 cursor-pointer text-center select-none">
-          進階：手動輸入 Access Token
-        </summary>
-        <div className="w-full p-4 border border-gray-200 rounded-2xl bg-white space-y-3 mt-2">
-          <textarea
-            value={tokenInput}
-            onChange={e => setTokenInput(e.target.value)}
-            placeholder="貼上 Access Token (IGAA... 或 EAA...)"
-            className="w-full border border-gray-300 rounded-lg px-3 py-3 text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-black"
-            rows={4}
-          />
-          {tokenError && <p className="text-red-500 text-sm">{tokenError}</p>}
-          <button
-            onClick={handleConnectToken}
-            disabled={tokenLoading || !tokenInput.trim()}
-            className="w-full py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 font-medium text-sm"
-          >
-            {tokenLoading ? '驗證中...' : '以 Token 連結'}
-          </button>
-          <p className="text-xs text-gray-400 text-center">
-            💡 請使用長效 Access Token（60 天有效期），系統會自動刷新
-          </p>
-        </div>
-      </details>
-    </main>
-  )
+  }, [userId, isLoading, router])
 
   // ── Step 2：輸入人設 ────────────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

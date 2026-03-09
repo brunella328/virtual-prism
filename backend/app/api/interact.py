@@ -14,7 +14,12 @@ import hmac
 import json
 import logging
 import os
+from collections import deque
+from datetime import datetime, timezone
 from typing import Any
+
+# In-memory webhook event log (last 20 events)
+_webhook_log: deque = deque(maxlen=20)
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -55,6 +60,16 @@ async def instagram_webhook(request: Request):
     """
     raw_body = await request.body()
 
+    # Log ALL incoming webhook requests (before signature check) for debugging
+    try:
+        _webhook_log.append({
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "headers": dict(request.headers),
+            "payload_raw": raw_body.decode("utf-8", errors="replace")[:500],
+        })
+    except Exception:
+        pass
+
     # Verify X-Hub-Signature-256 when APP_SECRET is configured
     app_secret = os.getenv("INSTAGRAM_APP_SECRET", "")
     if app_secret:
@@ -72,10 +87,59 @@ async def instagram_webhook(request: Request):
 
     entries = payload.get("entry", [])
     for entry in entries:
-        # ── Comment events ────────────────────────────────────────────────────
+        # ── Comment & DM events via changes[] ────────────────────────────────
         changes = entry.get("changes", [])
         for change in changes:
             field = change.get("field", "")
+
+            # ── DM via changes[].field = "messages" (Instagram Login format) ──
+            if field == "messages":
+                value = change.get("value", {})
+                sender_igsid = value.get("sender", {}).get("id", "")
+                recipient_id = value.get("recipient", {}).get("id", "") or entry.get("id", "")
+                message_obj = value.get("message", {})
+                message_text = message_obj.get("text", "")
+
+                if not message_text or message_obj.get("is_echo"):
+                    continue
+
+                persona_id = _resolve_persona_id(recipient_id)
+
+                try:
+                    fan_memory_service.upsert_fan(persona_id, sender_igsid, sender_igsid, message_text)
+                except Exception as fan_exc:
+                    logger.warning("Fan memory upsert failed (DM changes): %s", fan_exc)
+
+                try:
+                    draft_text = interact_service.generate_reply_draft(
+                        persona_id, message_text, sender_igsid, fan_id=sender_igsid, channel="dm"
+                    )
+                    risk_level = interact_service.check_risk(message_text)
+                    mode = interact_service.get_auto_reply_setting(persona_id)
+
+                    if mode == "auto" and risk_level == "low":
+                        token_info = ig_token_store.get(persona_id, {})
+                        access_token = token_info.get("access_token", "")
+                        if access_token:
+                            draft = interact_service.add_pending_reply(
+                                persona_id, "", "", sender_igsid, message_text,
+                                draft_text, risk_level, channel="dm", sender_igsid=sender_igsid,
+                            )
+                            interact_service.send_dm(draft["reply_id"], access_token)
+                        else:
+                            interact_service.add_pending_reply(
+                                persona_id, "", "", sender_igsid, message_text,
+                                draft_text, risk_level, channel="dm", sender_igsid=sender_igsid,
+                            )
+                    else:
+                        interact_service.add_pending_reply(
+                            persona_id, "", "", sender_igsid, message_text,
+                            draft_text, risk_level, channel="dm", sender_igsid=sender_igsid,
+                        )
+                except Exception as exc:
+                    logger.error("Error processing DM (changes) event: %s", exc)
+                continue
+
             if field != "comments":
                 continue
 
@@ -181,6 +245,12 @@ async def instagram_webhook(request: Request):
                 logger.error("Error processing DM event: %s", exc)
 
     return {"status": "ok"}
+
+
+@router.get("/webhook/debug")
+async def webhook_debug():
+    """Return last 20 received webhook payloads for debugging."""
+    return {"count": len(_webhook_log), "events": list(_webhook_log)}
 
 
 def _resolve_persona_id(ig_account_id: str) -> str:

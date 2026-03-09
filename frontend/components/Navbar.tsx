@@ -1,25 +1,22 @@
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
 import { useUser } from '@/contexts/UserContext'
-import { disconnectInstagram } from '@/lib/api'
 
 const NAV_LINKS = [
   { href: '/onboarding', label: '人設' },
   { href: '/dashboard', label: '內容' },
   { href: '/schedule', label: '排程紀錄' },
+  { href: '/settings', label: '設定' },
 ]
 
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { userId, igUsername, logout } = useUser()
+  const { email, igUsername, logout } = useUser()
 
-  const handleLogout = async () => {
-    if (userId) {
-      disconnectInstagram(userId).catch(() => {})
-    }
+  const handleLogout = () => {
     logout()
-    router.push('/onboarding')
+    router.push('/login')
   }
 
   return (
@@ -44,9 +41,11 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          {igUsername && (
+          {igUsername ? (
             <span className="text-sm text-gray-500">@{igUsername}</span>
-          )}
+          ) : email ? (
+            <span className="text-sm text-gray-500">{email}</span>
+          ) : null}
           <button
             onClick={handleLogout}
             className="text-xs text-gray-400 hover:text-black border border-gray-200 px-3 py-1.5 rounded-lg hover:border-gray-400 transition-colors"

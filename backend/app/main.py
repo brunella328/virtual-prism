@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import genesis, life_stream, interact, image, instagram, fans, poc
+from app.api import genesis, life_stream, interact, image, instagram, fans, poc, auth
 from app.services.instagram_service import get_scheduler, start_scheduler
 
 
@@ -37,6 +37,8 @@ _PUBLIC_PATHS = {
     "/api/instagram/auth",
     "/api/instagram/callback",
     "/api/interact/webhook/instagram",
+    "/api/auth/register",
+    "/api/auth/login",
 }
 
 # Rate limiting: sliding window per key
@@ -102,6 +104,7 @@ app.include_router(interact.router, prefix="/api/interact", tags=["Interaction H
 app.include_router(instagram.router, prefix="/api/instagram", tags=["Instagram (T9)"])
 app.include_router(fans.router, prefix="/api/fans", tags=["Fan Memory"])
 app.include_router(poc.router, prefix="/api", tags=["POC"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 
 
 @app.get("/health")

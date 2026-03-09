@@ -4,35 +4,38 @@
  *
  * 規則：
  * - Pages / components 只呼叫 useUser()，不直接碰 localStorage
- * - 任何 auth 狀態變更（connect / logout）必須透過此 context
+ * - 任何 auth 狀態變更（login / logout / connectIg）必須透過此 context
  * - storage.ts 是唯一的 localStorage 入口
  */
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { storage } from '@/lib/storage'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface UserState {
-  userId: string | null
-  igUsername: string | null
+  userId: string | null      // UUID（平台帳號）
+  email: string | null
+  jwtToken: string | null
+  igUsername: string | null  // 僅在連結 IG 後有值
+  hasIgToken: boolean
   appearancePrompt: string
 }
 
 export interface UserContextType extends UserState {
-  /** 是否已登入（userId 非 null） */
   isAuthenticated: boolean
-  /** localStorage 尚未讀完時為 true，等到 false 再做 auth 判斷 */
   isLoading: boolean
-  /**
-   * 連結 IG 帳號後呼叫，同時更新 React state 與 localStorage。
-   * userId = IG account ID（同時也是 persona ID）
-   */
-  connect: (userId: string, igUsername: string, appearancePrompt?: string) => void
+  /** Email + password 登入 */
+  loginWithEmail: (email: string, password: string) => Promise<void>
+  /** Email + password 註冊 */
+  registerWithEmail: (email: string, password: string) => Promise<void>
+  /** IG OAuth 完成後呼叫（/auth/callback 頁面使用） */
+  connectIg: (igUsername: string) => void
   /** 登出：清除所有 state 與 localStorage */
   logout: () => void
-  /** 更新 appearance prompt（onboarding 完成時呼叫） */
   setAppearancePrompt: (prompt: string) => void
 }
 
@@ -43,38 +46,104 @@ export interface UserContextType extends UserState {
 const UserContext = createContext<UserContextType | null>(null)
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  // Start with null/empty to match server render — avoids hydration mismatch
   const [state, setState] = useState<UserState>({
     userId: null,
+    email: null,
+    jwtToken: null,
     igUsername: null,
+    hasIgToken: false,
     appearancePrompt: '',
   })
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load from localStorage only after hydration (client only)
   useEffect(() => {
+    const userId = storage.getUserId()
+    const jwtToken = storage.getJwtToken()
     setState({
-      userId: storage.getUserId(),
+      userId,
+      email: storage.getEmail(),
+      jwtToken,
       igUsername: storage.getIgUsername(),
+      hasIgToken: false,
       appearancePrompt: storage.getAppearancePrompt(),
     })
+    // 若有 JWT，從後端確認 has_ig_token
+    if (userId && jwtToken) {
+      fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${jwtToken}` },
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) {
+            setState(prev => ({ ...prev, hasIgToken: data.has_ig_token ?? false }))
+          }
+        })
+        .catch(() => {})
+    }
     setIsLoading(false)
   }, [])
 
-  const connect = useCallback((
-    userId: string,
-    igUsername: string,
-    appearancePrompt = '',
-  ) => {
-    storage.setUserId(userId)
+  const loginWithEmail = useCallback(async (email: string, password: string) => {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.detail || 'Login failed')
+    }
+    const data = await res.json()
+    storage.setUserId(data.uuid)
+    storage.setEmail(data.email)
+    storage.setJwtToken(data.token)
+    setState(prev => ({
+      ...prev,
+      userId: data.uuid,
+      email: data.email,
+      jwtToken: data.token,
+      hasIgToken: false,
+    }))
+  }, [])
+
+  const registerWithEmail = useCallback(async (email: string, password: string) => {
+    const res = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.detail || 'Registration failed')
+    }
+    const data = await res.json()
+    storage.setUserId(data.uuid)
+    storage.setEmail(data.email)
+    storage.setJwtToken(data.token)
+    setState(prev => ({
+      ...prev,
+      userId: data.uuid,
+      email: data.email,
+      jwtToken: data.token,
+      hasIgToken: false,
+    }))
+  }, [])
+
+  const connectIg = useCallback((igUsername: string) => {
     storage.setIgUsername(igUsername)
-    if (appearancePrompt) storage.setAppearancePrompt(appearancePrompt)
-    setState({ userId, igUsername, appearancePrompt })
+    setState(prev => ({ ...prev, igUsername, hasIgToken: true }))
   }, [])
 
   const logout = useCallback(() => {
     storage.clearAll()
-    setState({ userId: null, igUsername: null, appearancePrompt: '' })
+    setState({
+      userId: null,
+      email: null,
+      jwtToken: null,
+      igUsername: null,
+      hasIgToken: false,
+      appearancePrompt: '',
+    })
   }, [])
 
   const setAppearancePrompt = useCallback((prompt: string) => {
@@ -87,7 +156,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       ...state,
       isAuthenticated: !!state.userId,
       isLoading,
-      connect,
+      loginWithEmail,
+      registerWithEmail,
+      connectIg,
       logout,
       setAppearancePrompt,
     }}>

@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from app.services import instagram_service as svc
+from app.services import instagram_service as svc, users_storage
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +79,14 @@ async def oauth_callback(
         info = svc.exchange_code_for_token(code, state)
         ig_user_id = info.get("ig_account_id", state)
         ig_username = info.get("ig_username", "")
+        ig_token = info.get("access_token", "")
+        # 若 state 是 UUID（新流程），同步更新 users_storage
+        user = users_storage.get_user_by_uuid(state)
+        if user and ig_token:
+            users_storage.update_ig_token(state, ig_token, ig_user_id)
         # Redirect to frontend /auth/callback — stores session in localStorage
         return RedirectResponse(
-            url=f"{frontend_url}/auth/callback?ig_user_id={ig_user_id}&ig_username={ig_username}"
+            url=f"{frontend_url}/auth/callback?ig_user_id={ig_user_id}&ig_username={ig_username}&persona_id={state}"
         )
     except Exception as e:
         logger.exception("Token exchange failed")
