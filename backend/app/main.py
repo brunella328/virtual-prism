@@ -39,12 +39,18 @@ _PUBLIC_PATHS = {
     "/api/interact/webhook/instagram",
     "/api/auth/register",
     "/api/auth/login",
+    "/api/auth/verify-email",
+    "/api/auth/resend-verification",
+    "/api/auth/dev/reset-verification",
 }
 
 # Rate limiting: sliding window per key
+# key_by: "persona" = last path segment, "ip" = client IP
 _RATE_LIMITS = {
-    "/api/genesis/analyze-appearance":     {"max": 5, "window": 60},
-    "/api/life-stream/generate-schedule/": {"max": 2, "window": 60},
+    "/api/genesis/analyze-appearance":     {"max": 5,  "window": 60,   "key_by": "persona"},
+    "/api/life-stream/generate-schedule/": {"max": 2,  "window": 60,   "key_by": "persona"},
+    "/api/auth/register":                  {"max": 10, "window": 3600, "key_by": "ip"},
+    "/api/auth/login":                     {"max": 10, "window": 900,  "key_by": "ip"},
 }
 _rate_store: dict = defaultdict(list)
 
@@ -54,15 +60,15 @@ async def rate_limit_middleware(request: Request, call_next):
     path = request.url.path
     for prefix, limits in _RATE_LIMITS.items():
         if path.startswith(prefix):
-            # Key: last path segment (persona_id) or client IP
-            client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
-            key = f"{prefix}:{path.split('/')[-1] or client_ip}"
+            client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown").split(",")[0].strip()
+            segment = path.split("/")[-1]
+            key = f"{prefix}:{client_ip if limits['key_by'] == 'ip' else (segment or client_ip)}"
             now = time.monotonic()
             window = limits["window"]
             _rate_store[key] = [t for t in _rate_store[key] if now - t < window]
             if len(_rate_store[key]) >= limits["max"]:
                 return JSONResponse(
-                    {"error": "rate_limit_exceeded", "detail": f"最多每 {window} 秒 {limits['max']} 次"},
+                    {"error": "rate_limit_exceeded", "detail": f"請求過於頻繁，請稍後再試"},
                     status_code=429,
                     headers={"Retry-After": str(window)},
                 )
@@ -81,16 +87,21 @@ async def api_key_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+_default_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3000",
+]
+_allowed_origins = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", ",".join(_default_origins)).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001", 
-        "http://localhost:3002",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:3002"
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

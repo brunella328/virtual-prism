@@ -1,29 +1,64 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useUser } from '@/contexts/UserContext'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 export default function LoginPage() {
   const router = useRouter()
-  const { loginWithEmail } = useUser()
+  const { loginWithEmail, isAuthenticated, isLoading } = useUser()
   const [email, setEmail] = useState('')
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) router.replace('/dashboard')
+  }, [isAuthenticated, isLoading, router])
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendMsg, setResendMsg] = useState('')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setNeedsVerification(false)
+    setResendMsg('')
     setLoading(true)
     try {
       await loginWithEmail(email, password)
       router.push('/dashboard')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '登入失敗')
+      const msg = err instanceof Error ? err.message : '登入失敗'
+      if (msg.includes('驗證 Email') || msg.includes('驗證信')) {
+        setNeedsVerification(true)
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleResend() {
+    setResendLoading(true)
+    setResendMsg('')
+    try {
+      const res = await fetch(`${API_URL}/api/auth/resend-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: '' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || '重送失敗')
+      setResendMsg(data.message)
+    } catch (err: unknown) {
+      setResendMsg(err instanceof Error ? err.message : '重送失敗')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -39,7 +74,7 @@ export default function LoginPage() {
               type="email"
               required
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={e => { setEmail(e.target.value); setNeedsVerification(false); setResendMsg('') }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
               placeholder="you@example.com"
             />
@@ -58,6 +93,24 @@ export default function LoginPage() {
           </div>
 
           {error && <p className="text-sm text-red-500">{error}</p>}
+
+          {needsVerification && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-2">
+              <p className="text-sm text-yellow-800">請先驗證 Email 才能登入。</p>
+              {resendMsg ? (
+                <p className="text-sm text-green-700">{resendMsg}</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendLoading}
+                  className="text-sm text-yellow-700 underline hover:text-yellow-900 disabled:opacity-50"
+                >
+                  {resendLoading ? '寄送中...' : '重新寄送驗證信'}
+                </button>
+              )}
+            </div>
+          )}
 
           <button
             type="submit"

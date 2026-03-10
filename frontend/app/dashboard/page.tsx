@@ -29,7 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 export default function DashboardPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { userId, isAuthenticated, isLoading, appearancePrompt, hasIgToken } = useUser()
+  const { userId, jwtToken, isAuthenticated, isLoading, appearancePrompt, hasIgToken } = useUser()
   const { toasts, addToast, removeToast } = useToast()
 
   // Schedule state
@@ -140,6 +140,7 @@ export default function DashboardPage() {
       fd.append('appearance_prompt', appearancePrompt || '')
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
+        headers: jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {},
         body: fd,
       })
       if (!res.ok) {
@@ -151,7 +152,16 @@ export default function DashboardPage() {
       storage.setSchedule([post])
       addToast('今日貼文已生成 ✓', 'success')
     } catch (e) {
-      addToast(`生成失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('已達生成上限')) {
+        addToast(msg, 'info')
+      } else if (msg.includes('人設') || msg.includes('persona') || msg.includes('400')) {
+        // 無人設 → 導去 onboarding
+        router.replace('/onboarding')
+        return
+      } else {
+        addToast(`生成失敗：${msg}`, 'error')
+      }
     } finally {
       setLoading(false)
     }
@@ -169,6 +179,7 @@ export default function DashboardPage() {
       if (refImage) fd.append('reference_image', refImage)
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
+        headers: jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {},
         body: fd,
       })
       if (!res.ok) {
@@ -186,7 +197,13 @@ export default function DashboardPage() {
       setSelectedPost(post)
       setCalendarFocusDate(post.date)
     } catch (e) {
-      addToast(`生成失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('已達生成上限')) {
+        addToast(msg, 'info')
+        setAddPostDate(null)
+      } else {
+        addToast(`生成失敗：${msg}`, 'error')
+      }
     } finally {
       setAddPostLoading(false)
     }
@@ -268,28 +285,40 @@ export default function DashboardPage() {
   const handleWebShare = async (post_id: string) => {
     const item = schedule.find(s => s.post_id === post_id)
     if (!item?.image_url) { addToast('缺少圖片', 'error'); return }
+
+    const triggerDownload = (blob: Blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'virtual-prism-post.jpg'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      addToast('圖片已下載，請手動上傳到社交平台', 'success')
+    }
+
     try {
       const response = await fetch(item.image_url)
       const blob = await response.blob()
       const file = new File([blob], 'virtual-prism-post.jpg', { type: blob.type || 'image/jpeg' })
       const shareData = { files: [file], text: item.caption }
+
       if (navigator.canShare && navigator.canShare(shareData)) {
-        await navigator.share(shareData)
-        addToast('已開啟分享', 'success')
+        try {
+          await navigator.share(shareData)
+          addToast('已開啟分享', 'success')
+        } catch (shareErr) {
+          // AbortError = 用戶取消，不提示；其他錯誤 fallback 到下載
+          if (shareErr instanceof Error && shareErr.name !== 'AbortError') {
+            triggerDownload(blob)
+          }
+        }
       } else {
-        // Fallback: download
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = 'virtual-prism-post.jpg'
-        a.click()
-        URL.revokeObjectURL(url)
-        addToast('圖片已下載，請手動上傳到社交平台', 'success')
+        triggerDownload(blob)
       }
     } catch (e) {
-      if (e instanceof Error && e.name !== 'AbortError') {
-        addToast(`分享失敗：${e.message}`, 'error')
-      }
+      addToast(`無法取得圖片：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
   }
 
@@ -507,11 +536,22 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="bg-gray-50 rounded-xl p-4 relative">
-                  <button
-                    onClick={() => { setEditCaption(selectedItem.caption); setEditScenePrompt(selectedItem.scene_prompt || ''); setEditMode(true) }}
-                    className="absolute top-3 right-3 text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
-                  >✏️ 編輯</button>
-                  <p className="text-sm pr-12">{selectedItem.caption}</p>
+                  <div className="absolute top-3 right-3 flex gap-1">
+                    <button
+                      onClick={() => {
+                        const text = selectedItem.hashtags
+                          ? `${selectedItem.caption}\n\n${selectedItem.hashtags.join(' ')}`
+                          : selectedItem.caption
+                        navigator.clipboard.writeText(text).then(() => addToast('文案已複製 ✓', 'success'))
+                      }}
+                      className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
+                    >📋 複製</button>
+                    <button
+                      onClick={() => { setEditCaption(selectedItem.caption); setEditScenePrompt(selectedItem.scene_prompt || ''); setEditMode(true) }}
+                      className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200"
+                    >✏️ 編輯</button>
+                  </div>
+                  <p className="text-sm pr-24">{selectedItem.caption}</p>
                   {selectedItem.hashtags && (
                     <p className="text-xs text-blue-500 mt-2">{selectedItem.hashtags.join(' ')}</p>
                   )}
@@ -578,8 +618,8 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Publish (IG connected only) */}
-              {igConnected && selectedItem.status !== 'regenerating' && (
+              {/* Publish */}
+              {selectedItem.status !== 'regenerating' && (
                 <div className="border-t pt-4 space-y-3">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">發布</p>
                   {(selectedItem.scheduledAt || selectedItem.scheduled_at) ? (

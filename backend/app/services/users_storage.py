@@ -10,6 +10,9 @@ Schema:
   "hashed_password": "...",
   "ig_token": null,
   "ig_user_id": null,
+  "email_verified": false,
+  "verification_token": "...",
+  "posts_generated": 0,
   "created_at": "2026-03-10T..."
 }
 """
@@ -61,6 +64,9 @@ def create_user(email: str, hashed_password: str) -> dict:
         "hashed_password": hashed_password,
         "ig_token": None,
         "ig_user_id": None,
+        "email_verified": False,
+        "verification_token": str(uuid.uuid4()),
+        "posts_generated": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     save_user(user)
@@ -73,5 +79,28 @@ def update_ig_token(user_uuid: str, ig_token: Optional[str], ig_user_id: Optiona
         return None
     user["ig_token"] = ig_token
     user["ig_user_id"] = ig_user_id
+    save_user(user)
+    return user
+
+
+def verify_email(token: str) -> Optional[dict]:
+    """找到對應 verification_token 的 user，標記為已驗證並清除 token"""
+    _ensure_dir()
+    for p in STORAGE_DIR.glob("*.json"):
+        with open(p, encoding="utf-8") as f:
+            user = json.load(f)
+        if user.get("verification_token") == token:
+            user["email_verified"] = True
+            user["verification_token"] = None
+            save_user(user)
+            return user
+    return None
+
+
+def increment_posts_generated(user_uuid: str, count: int = 1) -> Optional[dict]:
+    user = get_user_by_uuid(user_uuid)
+    if not user:
+        return None
+    user["posts_generated"] = user.get("posts_generated", 0) + count
     save_user(user)
     return user

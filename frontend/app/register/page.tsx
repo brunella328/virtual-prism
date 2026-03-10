@@ -1,16 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useUser } from '@/contexts/UserContext'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { registerWithEmail } = useUser()
+  const { registerWithEmail, isAuthenticated, isLoading } = useUser()
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) router.replace('/dashboard')
+  }, [isAuthenticated, isLoading, router])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -22,13 +27,29 @@ export default function RegisterPage() {
     }
     setLoading(true)
     try {
-      await registerWithEmail(email, password)
-      router.push('/onboarding')
+      const msg = await registerWithEmail(email, password)
+      setSuccessMsg(msg)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '註冊失敗')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (successMsg) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm p-8 space-y-4 text-center">
+          <div className="text-5xl">📬</div>
+          <h2 className="text-xl font-bold">驗證信已寄出</h2>
+          <p className="text-sm text-gray-500">{successMsg}</p>
+          <p className="text-sm text-gray-400">驗證完成後，請回到登入頁面。</p>
+          <Link href="/login" className="block w-full bg-black text-white rounded-lg py-2 text-sm font-medium hover:bg-gray-800 text-center">
+            前往登入
+          </Link>
+        </div>
+      </main>
+    )
   }
 
   return (

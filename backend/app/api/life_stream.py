@@ -1,12 +1,16 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from typing import Optional
 import anthropic
 import logging
-from app.services import life_stream_service
+from app.services import life_stream_service, users_storage
+from app.api.auth import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+POST_QUOTA = 3  # 每帳號生成圖文總上限
 
 class GenerateScheduleRequest(BaseModel):
     # persona 已移除：後端直接從 persona_storage 讀取，前端不需傳入
@@ -22,17 +26,28 @@ class RegenerateRequest(BaseModel):
     persona_id: Optional[str] = None
 
 @router.post("/generate-schedule/{persona_id}")
-async def generate_schedule(persona_id: str, req: GenerateScheduleRequest):
+async def generate_schedule(
+    persona_id: str,
+    req: GenerateScheduleRequest,
+    current_user: dict = Depends(get_current_user),
+):
     _verify_persona(persona_id)
-    """T6: 根據人設自動規劃 3 天圖文內容（含生圖）
-    
-    人臉參考圖自動從存儲的 persona 讀取，無需前端傳入。
-    """
+    """T6: 根據人設自動規劃 3 天圖文內容（含生圖）"""
+    generated = current_user.get("posts_generated", 0)
+    if generated >= POST_QUOTA:
+        raise HTTPException(
+            status_code=403,
+            detail=f"已達生成上限（{POST_QUOTA} 篇）。感謝使用 Virtual Prism！",
+        )
     try:
-        return await life_stream_service.generate_weekly_schedule(
+        result = await life_stream_service.generate_weekly_schedule(
             persona_id=persona_id,
             appearance_prompt=req.appearance_prompt or "",
         )
+        # 計算本次實際生成篇數並更新配額
+        post_count = len(result.get("posts", [])) if isinstance(result, dict) else 1
+        users_storage.increment_posts_generated(current_user["uuid"], post_count)
+        return result
     except ValueError as e:
         # Persona 不存在或 JSON 格式錯誤
         logger.error(f"ValueError in generate_schedule: {e}")
@@ -69,13 +84,12 @@ async def generate_schedule(persona_id: str, req: GenerateScheduleRequest):
         )
 
 def _verify_persona(persona_id: str):
-    """確認 persona_id 在 token store 中存在，否則 403。'default' 跳過驗證（開發用）。"""
-    if persona_id == "default":
-        return
-    from app.services.instagram_service import get_connection_status
-    status = get_connection_status(persona_id)
-    if not status.get("connected"):
-        raise HTTPException(status_code=403, detail=f"Unauthorized persona_id: {persona_id}")
+    """確認 persona_id 合法（非空字串即可）。
+    新流程：persona_id 為 UUID，不需要 IG token 才能使用排程功能。
+    IG token 只有在發布到 IG 時才需要（由 instagram.py 的 publish endpoint 檢查）。
+    """
+    if not persona_id or persona_id.strip() == "":
+        raise HTTPException(status_code=400, detail="persona_id is required")
 
 
 @router.post("/generate-post/{persona_id}")
@@ -85,9 +99,16 @@ async def generate_post(
     appearance_prompt: str = Form(""),
     user_hint: str = Form(""),
     reference_image: Optional[UploadFile] = File(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """月曆模式：為指定日期生成單篇貼文（append，不覆蓋現有排程）"""
     _verify_persona(persona_id)
+    generated = current_user.get("posts_generated", 0)
+    if generated >= POST_QUOTA:
+        raise HTTPException(
+            status_code=403,
+            detail=f"已達生成上限（{POST_QUOTA} 篇）。感謝使用 Virtual Prism！",
+        )
     from datetime import date as date_type
     # 驗證日期格式
     try:
@@ -113,6 +134,7 @@ async def generate_post(
             user_hint=user_hint or "",
             reference_image_url=ref_url,
         )
+        users_storage.increment_posts_generated(current_user["uuid"], 1)
         return post
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

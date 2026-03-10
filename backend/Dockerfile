@@ -15,7 +15,7 @@ RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+  CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# --workers 1: APScheduler + SQLite requires single process
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "info"]
+# --workers 1: APScheduler requires single process
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --log-level info"]

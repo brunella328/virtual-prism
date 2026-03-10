@@ -30,8 +30,8 @@ export interface UserContextType extends UserState {
   isLoading: boolean
   /** Email + password 登入 */
   loginWithEmail: (email: string, password: string) => Promise<void>
-  /** Email + password 註冊 */
-  registerWithEmail: (email: string, password: string) => Promise<void>
+  /** Email + password 註冊，成功後回傳後端 message（需 email 驗證） */
+  registerWithEmail: (email: string, password: string) => Promise<string>
   /** IG OAuth 完成後呼叫（/auth/callback 頁面使用） */
   connectIg: (igUsername: string) => void
   /** 登出：清除所有 state 與 localStorage */
@@ -106,7 +106,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }))
   }, [])
 
-  const registerWithEmail = useCallback(async (email: string, password: string) => {
+  const registerWithEmail = useCallback(async (email: string, password: string): Promise<string> => {
     const res = await fetch(`${API_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -117,16 +117,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || 'Registration failed')
     }
     const data = await res.json()
-    storage.setUserId(data.uuid)
-    storage.setEmail(data.email)
-    storage.setJwtToken(data.token)
-    setState(prev => ({
-      ...prev,
-      userId: data.uuid,
-      email: data.email,
-      jwtToken: data.token,
-      hasIgToken: false,
-    }))
+    // 後端不再回傳 token，需先驗證 email 才能登入
+    return data.message as string
   }, [])
 
   const connectIg = useCallback((igUsername: string) => {
