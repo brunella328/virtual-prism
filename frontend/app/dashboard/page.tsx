@@ -1,5 +1,5 @@
 'use client'
-export const dynamic = 'force-dynamic'
+import { Suspense } from 'react'
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '@/contexts/UserContext'
@@ -27,7 +27,7 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: '需重繪', regenerating: '重繪中', scheduled: '待發布', failed: '發布失敗',
 }
 
-export default function DashboardPage() {
+function DashboardInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { userId, jwtToken, isAuthenticated, isLoading, appearancePrompt, hasIgToken } = useUser()
@@ -706,5 +706,13 @@ export default function DashboardPage() {
 
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense>
+      <DashboardInner />
+    </Suspense>
   )
 }

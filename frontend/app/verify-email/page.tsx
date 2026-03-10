@@ -1,12 +1,11 @@
 'use client'
-export const dynamic = 'force-dynamic'
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { storage } from '@/lib/storage'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-export default function VerifyEmailPage() {
+function VerifyEmailInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying')
@@ -14,7 +13,6 @@ export default function VerifyEmailPage() {
   const called = useRef(false)
 
   useEffect(() => {
-    // 防止 React StrictMode 雙重執行
     if (called.current) return
     called.current = true
 
@@ -64,5 +62,13 @@ export default function VerifyEmailPage() {
         重新註冊
       </a>
     </main>
+  )
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense>
+      <VerifyEmailInner />
+    </Suspense>
   )
 }
