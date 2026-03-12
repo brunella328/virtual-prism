@@ -15,7 +15,7 @@ export interface DayContent {
   image_url?: string
   image_prompt?: string
   seed: number
-  status: 'draft' | 'approved' | 'published' | 'rejected' | 'regenerating' | 'scheduled'
+  status: 'draft' | 'shared' | 'approved' | 'published' | 'rejected' | 'regenerating' | 'scheduled'
   hashtags?: string[]
   scheduledAt?: string
   scheduled_at?: string   // backend field name (snake_case)
