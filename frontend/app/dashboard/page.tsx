@@ -15,16 +15,11 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
-  approved: 'bg-green-100 text-green-700',
-  published: 'bg-blue-100 text-blue-700',
-  rejected: 'bg-red-100 text-red-600',
+  shared: 'bg-blue-100 text-blue-700',
   regenerating: 'bg-yellow-100 text-yellow-700',
-  scheduled: 'bg-purple-100 text-purple-700',
-  failed: 'bg-red-100 text-red-700',
 }
 const STATUS_LABEL: Record<string, string> = {
-  draft: '草稿', approved: '已核准', published: '已發布',
-  rejected: '需重繪', regenerating: '重繪中', scheduled: '待發布', failed: '發布失敗',
+  draft: '草稿', shared: '已分享', regenerating: '重繪中',
 }
 
 function DashboardInner() {
@@ -309,18 +304,34 @@ function DashboardInner() {
       const file = new File([blob], 'virtual-prism-post.jpg', { type: blob.type || 'image/jpeg' })
       const shareData = { files: [file], text: item.caption }
 
+      const markShared = () => {
+        setSchedule(prev => {
+          const updated = prev.map(s => s.post_id === post_id ? { ...s, status: 'shared' as const } : s)
+          storage.setSchedule(updated)
+          return updated
+        })
+        fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'shared' }),
+        }).catch(() => {})
+      }
+
       if (navigator.canShare && navigator.canShare(shareData)) {
         try {
           await navigator.share(shareData)
-          addToast('已開啟分享', 'success')
+          markShared()
+          addToast('已分享 ✓', 'success')
         } catch (shareErr) {
           // AbortError = 用戶取消，不提示；其他錯誤 fallback 到下載
           if (shareErr instanceof Error && shareErr.name !== 'AbortError') {
             triggerDownload(blob)
+            markShared()
           }
         }
       } else {
         triggerDownload(blob)
+        markShared()
       }
     } catch (e) {
       addToast(`無法取得圖片：${e instanceof Error ? e.message : String(e)}`, 'error')
@@ -418,10 +429,8 @@ function DashboardInner() {
             {schedule.length > 0 && (
               <div className="flex gap-2 flex-wrap items-center">
                 {[
-                  { key: 'draft',     label: '草稿'   },
-                  { key: 'approved',  label: '已核准' },
-                  { key: 'failed',    label: '發布失敗' },
-                  { key: 'rejected',  label: '需重繪' },
+                  { key: 'draft',   label: '草稿'   },
+                  { key: 'shared',  label: '已分享' },
                 ].filter(f => (statusCounts[f.key] ?? 0) > 0).map(f => (
                   <button
                     key={f.key}
