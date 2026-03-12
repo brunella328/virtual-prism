@@ -116,6 +116,10 @@ function DashboardInner() {
           }
           setLoading(false)
         } else {
+          if (!appearancePrompt) {
+            router.replace('/onboarding')
+            return
+          }
           generateTodayPost()
         }
       })
@@ -128,7 +132,7 @@ function DashboardInner() {
         }
         generateTodayPost()
       })
-  }, [userId])
+  }, [userId, appearancePrompt])
 
   // Generate single post for today (first-load only)
   const generateTodayPost = async () => {
@@ -414,10 +418,8 @@ function DashboardInner() {
             {schedule.length > 0 && (
               <div className="flex gap-2 flex-wrap items-center">
                 {[
-                  { key: 'scheduled', label: '待發布' },
                   { key: 'draft',     label: '草稿'   },
                   { key: 'approved',  label: '已核准' },
-                  { key: 'published', label: '已發布' },
                   { key: 'failed',    label: '發布失敗' },
                   { key: 'rejected',  label: '需重繪' },
                 ].filter(f => (statusCounts[f.key] ?? 0) > 0).map(f => (
