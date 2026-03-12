@@ -79,6 +79,10 @@ npm run dev
 
 跑通完整用戶旅程：上傳參考圖 → AI 生成人設卡 → 自動規劃一週內容 → 審核後台預覽 → 一鍵排程發布至 IG。系統可內部 Demo 穩定運行。
 
+## 開發狀態
+
+目前專案處於 MVP 開發階段，核心功能持續迭代中。
+
 ## 相關連結
 
 - [Epic Issue](https://github.com/brunella328/my-first-business/issues/25)
