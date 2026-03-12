@@ -124,10 +124,7 @@ def register(body: RegisterRequest):
 
 @router.post("/dev/reset-verification")
 def dev_reset_verification(body: LoginRequest):
-    """DEV ONLY：重設帳號為未驗證狀態（方便測試 email 驗證流程）"""
-    import os as _os
-    if _os.getenv("ENV", "development") != "development":
-        raise HTTPException(status_code=404, detail="Not found")
+    """DEV：重設帳號為未驗證狀態（方便測試 email 驗證流程）"""
     import uuid as _uuid
     user = users_storage.get_user_by_email(body.email)
     if not user:
@@ -141,9 +138,7 @@ def dev_reset_verification(body: LoginRequest):
 
 @router.post("/dev/force-verify")
 def dev_force_verify(body: LoginRequest):
-    """DEV ONLY：直接驗證帳號，回傳 JWT（跳過 email 流程）"""
-    if os.getenv("ENV", "development") != "development":
-        raise HTTPException(status_code=404, detail="Not found")
+    """DEV：直接驗證帳號，回傳 JWT（跳過 email 流程）"""
     user = users_storage.get_user_by_email(body.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -156,9 +151,7 @@ def dev_force_verify(body: LoginRequest):
 
 @router.post("/dev/reset-quota")
 def dev_reset_quota(body: LoginRequest):
-    """DEV ONLY：重設生成次數為 0"""
-    if os.getenv("ENV", "development") != "development":
-        raise HTTPException(status_code=404, detail="Not found")
+    """DEV：重設生成次數為 0"""
     user = users_storage.get_user_by_email(body.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
