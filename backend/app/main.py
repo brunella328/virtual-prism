@@ -42,6 +42,8 @@ _PUBLIC_PATHS = {
     "/api/auth/verify-email",
     "/api/auth/resend-verification",
     "/api/auth/dev/reset-verification",
+    "/api/auth/dev/force-verify",
+    "/api/auth/dev/reset-quota",
 }
 
 # Rate limiting: sliding window per key

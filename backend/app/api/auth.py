@@ -139,6 +139,34 @@ def dev_reset_verification(body: LoginRequest):
     return {"message": f"{body.email} 已重設為未驗證", "dev_verify_url": verify_url}
 
 
+@router.post("/dev/force-verify")
+def dev_force_verify(body: LoginRequest):
+    """DEV ONLY：直接驗證帳號，回傳 JWT（跳過 email 流程）"""
+    if os.getenv("ENV", "development") != "development":
+        raise HTTPException(status_code=404, detail="Not found")
+    user = users_storage.get_user_by_email(body.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user["email_verified"] = True
+    user["verification_token"] = None
+    users_storage.save_user(user)
+    token = _create_token(user["uuid"])
+    return {"message": f"{body.email} 已強制驗證", "token": token, "uuid": user["uuid"]}
+
+
+@router.post("/dev/reset-quota")
+def dev_reset_quota(body: LoginRequest):
+    """DEV ONLY：重設生成次數為 0"""
+    if os.getenv("ENV", "development") != "development":
+        raise HTTPException(status_code=404, detail="Not found")
+    user = users_storage.get_user_by_email(body.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user["posts_generated"] = 0
+    users_storage.save_user(user)
+    return {"message": f"{body.email} 生成次數已重設為 0"}
+
+
 @router.post("/resend-verification")
 def resend_verification(body: LoginRequest):
     """重送驗證信（只需 email，不需密碼正確）"""
