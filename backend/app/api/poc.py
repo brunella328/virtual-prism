@@ -87,7 +87,7 @@ class ModelComparisonRequest(BaseModel):
 
 
 class ModelResult(BaseModel):
-    model_name: str
+    name: str
     image_url: str
     generation_time: float
     cost_estimate: float
@@ -155,7 +155,7 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
             
             generation_time = time.time() - start_time
             return ModelResult(
-                model_name="flux-schnell (現用)",
+                name="flux-schnell (現用)",
                 image_url=image_url,
                 generation_time=generation_time,
                 cost_estimate=0.003
@@ -163,7 +163,7 @@ async def test_flux_schnell(prompt: str, seed: int) -> ModelResult:
     except Exception as e:
         logger.error(f"flux-schnell failed: {e}")
         return ModelResult(
-            model_name="flux-schnell (現用)",
+            name="flux-schnell (現用)",
             image_url="",
             generation_time=0,
             cost_estimate=0.003,
@@ -216,7 +216,7 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
             
             generation_time = time.time() - start_time
             return ModelResult(
-                model_name="flux-dev-realism",
+                name="flux-dev-realism",
                 image_url=image_url,
                 generation_time=generation_time,
                 cost_estimate=0.037
@@ -224,7 +224,7 @@ async def test_flux_realism(prompt: str, seed: int) -> ModelResult:
     except Exception as e:
         logger.error(f"flux-dev-realism failed: {e}")
         return ModelResult(
-            model_name="flux-dev-realism",
+            name="flux-dev-realism",
             image_url="",
             generation_time=0,
             cost_estimate=0.037,
@@ -278,7 +278,7 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
             
             generation_time = time.time() - start_time
             return ModelResult(
-                model_name="flux-cinestill",
+                name="flux-cinestill",
                 image_url=image_url,
                 generation_time=generation_time,
                 cost_estimate=0.014
@@ -286,7 +286,7 @@ async def test_flux_cinestill(prompt: str, seed: int) -> ModelResult:
     except Exception as e:
         logger.error(f"flux-cinestill failed: {e}")
         return ModelResult(
-            model_name="flux-cinestill",
+            name="flux-cinestill",
             image_url="",
             generation_time=0,
             cost_estimate=0.014,
@@ -303,7 +303,7 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
         base_result = await test_flux_cinestill(prompt, seed)
         if not base_result.image_url or base_result.error:
             return ModelResult(
-                model_name="cinestill + clarity",
+                name="cinestill + clarity",
                 image_url="",
                 generation_time=0,
                 cost_estimate=0.025,
@@ -347,7 +347,7 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
             
             generation_time = time.time() - start_time
             return ModelResult(
-                model_name="cinestill + clarity",
+                name="cinestill + clarity",
                 image_url=image_url,
                 generation_time=generation_time,
                 cost_estimate=0.025  # 0.014 + 0.011
@@ -355,7 +355,7 @@ async def test_cinestill_with_clarity(prompt: str, seed: int) -> ModelResult:
     except Exception as e:
         logger.error(f"cinestill+clarity failed: {e}")
         return ModelResult(
-            model_name="cinestill + clarity",
+            name="cinestill + clarity",
             image_url="",
             generation_time=0,
             cost_estimate=0.025,
