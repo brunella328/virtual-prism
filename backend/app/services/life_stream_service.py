@@ -18,6 +18,31 @@ load_dotenv()
 
 client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
+
+async def _analyze_reference_image(image_url: str) -> str:
+    """用 Claude Vision 分析參考圖，提取場景、姿勢、動作描述（忽略人臉）。"""
+    try:
+        msg = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "url", "url": image_url}},
+                    {"type": "text", "text": (
+                        "Describe this photo focusing ONLY on: scene/location, body pose, "
+                        "body action, camera angle, and background environment. "
+                        "Do NOT describe the person's face or identity. "
+                        "Reply in English, concise, max 40 words, suitable as part of an image generation prompt."
+                    )},
+                ],
+            }],
+        )
+        return msg.content[0].text.strip()
+    except Exception as e:
+        logger.warning(f"Reference image analysis failed: {e}")
+        return ""
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -228,17 +253,24 @@ async def generate_single_post(
         raise ValueError(f"Persona {persona_id} 不存在。")
 
     persona = persona_data.model_dump(exclude={"reference_face_url", "created_at", "id"})
-    face_image_url = reference_image_url or persona_data.reference_face_url or ""
+    face_image_url = persona_data.reference_face_url or ""
     base_prompt = (
         appearance_prompt
         or (persona_data.appearance.image_prompt if persona_data.appearance else "")
         or "attractive person, high quality, realistic"
     )
 
+    # 分析參考圖場景（僅用於 prompt 增強，不影響人臉）
+    ref_scene_desc = ""
+    if reference_image_url:
+        ref_scene_desc = await _analyze_reference_image(reference_image_url)
+
     # Step 1: LLM 規劃 1 篇內容
     user_content = f"請為以下人設規劃 1 篇 Instagram 內容（日期：{date}）：\n{json.dumps(persona, ensure_ascii=False)}"
     if user_hint:
         user_content += f"\n使用者偏好：{user_hint}"
+    if ref_scene_desc:
+        user_content += f"\n參考圖場景描述：{ref_scene_desc}"
     message = await client.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=512,
@@ -292,20 +324,27 @@ async def regenerate_content(
     persona_id: str = "",
     reference_image_url: str = "",
 ) -> dict:
-    """一鍵重繪：正確重建 prompt 並帶入 face_image_url"""
-    face_image_url = reference_image_url
+    """一鍵重繪：正確重建 prompt 並帶入 face_image_url
+    reference_image_url 僅用於場景/姿勢分析，人臉永遠使用 persona 原始臉照。
+    """
+    face_image_url = ""
     base_prompt = "attractive person, high quality, realistic"
     if persona_id:
         persona_data = load_persona(persona_id)
         if persona_data:
-            if not face_image_url:
-                face_image_url = persona_data.reference_face_url or ""
+            face_image_url = persona_data.reference_face_url or ""
             base_prompt = (
                 (persona_data.appearance.image_prompt if persona_data.appearance else "")
                 or base_prompt
             )
 
-    enhanced_scene = f"{scene_prompt}, {instruction}" if instruction else scene_prompt
+    # 分析參考圖場景（僅用於 prompt 增強，不影響人臉）
+    ref_scene_desc = ""
+    if reference_image_url:
+        ref_scene_desc = await _analyze_reference_image(reference_image_url)
+
+    parts = [p for p in [scene_prompt, ref_scene_desc, instruction] if p]
+    enhanced_scene = ", ".join(parts)
     camera_style = _infer_camera_style(enhanced_scene)
     full_prompt = comfyui_service.build_realism_prompt(
         character_desc=base_prompt,
