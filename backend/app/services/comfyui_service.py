@@ -70,6 +70,7 @@ def build_realism_prompt(character_desc: str, scene_prompt: str, camera_style: s
 
     return (
         f"A raw photo of {character_desc}, "
+        f"natural smile or neutral relaxed expression, no frowning, no angry face, "
         f"{scene_prompt}, "
         f"{camera}, "
         f"{color_cast}, "
