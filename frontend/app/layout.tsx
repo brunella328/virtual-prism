@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Syne } from 'next/font/google'
 import './globals.css'
 import { UserProvider } from '@/contexts/UserContext'
@@ -8,6 +8,12 @@ const syne = Syne({ subsets: ['latin'], weight: ['800'], variable: '--font-syne'
 export const metadata: Metadata = {
   title: 'Virtual Prism',
   description: 'B2B AI 虛擬網紅自動化營運平台',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 }
 
 export default function RootLayout({
