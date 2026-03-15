@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _register(client, email=None, password="testpass1"):
+def _register(client, email=None, password="Testpass1"):
     email = email or f"user_{uuid.uuid4().hex[:8]}@test.com"
     with patch("app.api.auth._send_verification_email"):
         res = client.post("/api/auth/register", json={"email": email, "password": password})
@@ -22,7 +22,7 @@ def _verify(client, email):
     user["email_verified"] = True
     user["verification_token"] = None
     users_storage.save_user(user)
-    res = client.post("/api/auth/login", json={"email": email, "password": "testpass1"})
+    res = client.post("/api/auth/login", json={"email": email, "password": "Testpass1"})
     return res.json()["token"]
 
 
@@ -42,7 +42,7 @@ def test_unverified_cannot_login(client):
     res, email = _register(client)
     assert res.status_code == 201
 
-    login = client.post("/api/auth/login", json={"email": email, "password": "testpass1"})
+    login = client.post("/api/auth/login", json={"email": email, "password": "Testpass1"})
     assert login.status_code == 403
     assert "驗證" in login.json()["detail"]
     _cleanup(email)
@@ -65,7 +65,7 @@ def test_verify_email_token_flow(client):
     assert data["email"] == email
 
     # 驗證後可正常登入
-    login = client.post("/api/auth/login", json={"email": email, "password": "testpass1"})
+    login = client.post("/api/auth/login", json={"email": email, "password": "Testpass1"})
     assert login.status_code == 200
     _cleanup(email)
 
