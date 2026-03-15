@@ -28,7 +28,6 @@ async def analyze_appearance(
                     "error": "API_RATE_LIMIT",
                     "message": "⏳ Claude API 達到速率限制，請稍後再試（約 1-2 分鐘）",
                     "tip": "圖片分析需要較多 API 配額，建議等待片刻後重新上傳",
-                    "technical": str(e)
                 }
             )
         # 其他错误
@@ -36,8 +35,7 @@ async def analyze_appearance(
             status_code=500,
             detail={
                 "error": "ANALYSIS_FAILED",
-                "message": f"❌ 圖片分析失敗：{str(e)}",
-                "tip": "請檢查圖片格式是否正確，或稍後再試"
+                "message": "❌ 圖片分析失敗，請檢查圖片格式是否正確，或稍後再試",
             }
         )
 
@@ -88,7 +86,6 @@ async def create_persona(
                 detail={
                     "error": "API_RATE_LIMIT",
                     "message": "⏳ Claude API 達到速率限制，請稍後再試（約 1-2 分鐘）",
-                    "technical": str(e)
                 }
             )
         elif isinstance(e, anthropic.AuthenticationError):
@@ -96,8 +93,7 @@ async def create_persona(
                 status_code=500,
                 detail={
                     "error": "API_AUTH_ERROR",
-                    "message": "❌ Anthropic API 認證失敗，請檢查 API Key 設定",
-                    "technical": str(e)
+                    "message": "❌ Anthropic API 認證失敗，請聯絡管理員",
                 }
             )
         elif isinstance(e, anthropic.APIError):
@@ -105,8 +101,7 @@ async def create_persona(
                 status_code=500,
                 detail={
                     "error": "API_ERROR",
-                    "message": f"❌ Anthropic API 呼叫失敗：{str(e)}",
-                    "technical": str(e)
+                    "message": "❌ AI 服務暫時無法使用，請稍後再試",
                 }
             )
 
@@ -115,8 +110,7 @@ async def create_persona(
             status_code=500,
             detail={
                 "error": "PERSONA_CREATION_FAILED",
-                "message": f"❌ 人設生成失敗：{str(e)}",
-                "technical": f"{type(e).__name__}: {str(e)}"
+                "message": "❌ 人設生成失敗，請稍後再試",
             }
         )
 

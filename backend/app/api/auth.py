@@ -29,9 +29,21 @@ RESEND_FROM = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # ── 設定 ────────────────────────────────────────────────────
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+_IS_PRODUCTION = os.getenv("ENV", "development") == "production"
+
+_raw_secret = os.getenv("JWT_SECRET_KEY", "")
+if not _raw_secret:
+    if _IS_PRODUCTION:
+        raise RuntimeError("JWT_SECRET_KEY must be set in production")
+    import logging as _logging
+    _logging.getLogger(__name__).critical(
+        "⚠️  JWT_SECRET_KEY not set — using insecure default. DO NOT use in production!"
+    )
+    _raw_secret = "dev-insecure-secret-do-not-use-in-production"
+SECRET_KEY = _raw_secret
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_DAYS = 30
+ACCESS_TOKEN_EXPIRE_DAYS = 14
 
 bearer_scheme = HTTPBearer()
 
@@ -98,10 +110,18 @@ class LoginRequest(BaseModel):
 
 
 # ── Endpoints ────────────────────────────────────────────────
+def _validate_password(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="密碼至少需要 8 個字元")
+    if not any(c.isupper() for c in password):
+        raise HTTPException(status_code=400, detail="密碼需包含至少 1 個大寫字母")
+    if not any(c.isdigit() for c in password):
+        raise HTTPException(status_code=400, detail="密碼需包含至少 1 個數字")
+
+
 @router.post("/register", status_code=201)
 def register(body: RegisterRequest):
-    if len(body.password) < 8:
-        raise HTTPException(status_code=400, detail="密碼至少需要 8 個字元")
+    _validate_password(body.password)
     if users_storage.get_user_by_email(body.email):
         raise HTTPException(status_code=409, detail="此 Email 已被註冊")
 
@@ -118,6 +138,8 @@ def register(body: RegisterRequest):
 @router.post("/dev/reset-verification")
 def dev_reset_verification(body: LoginRequest):
     """DEV：重設帳號為未驗證狀態（方便測試 email 驗證流程）"""
+    if _IS_PRODUCTION:
+        raise HTTPException(status_code=404, detail="Not found")
     import uuid as _uuid
     user = users_storage.get_user_by_email(body.email)
     if not user:
@@ -132,6 +154,8 @@ def dev_reset_verification(body: LoginRequest):
 @router.post("/dev/force-verify")
 def dev_force_verify(body: LoginRequest):
     """DEV：直接驗證帳號，回傳 JWT（跳過 email 流程）"""
+    if _IS_PRODUCTION:
+        raise HTTPException(status_code=404, detail="Not found")
     user = users_storage.get_user_by_email(body.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -145,6 +169,8 @@ def dev_force_verify(body: LoginRequest):
 @router.post("/dev/reset-quota")
 def dev_reset_quota(body: LoginRequest):
     """DEV：重設生成次數為 0"""
+    if _IS_PRODUCTION:
+        raise HTTPException(status_code=404, detail="Not found")
     user = users_storage.get_user_by_email(body.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

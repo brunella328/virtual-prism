@@ -15,6 +15,7 @@ Schema:
 }
 """
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,12 +23,18 @@ from typing import Optional
 
 STORAGE_DIR = Path(__file__).parent.parent.parent / "data" / "users"
 
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+)
+
 
 def _ensure_dir():
     STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _path(user_uuid: str) -> Path:
+    if not _UUID_RE.match(user_uuid):
+        raise ValueError(f"Invalid user UUID: {user_uuid!r}")
     return STORAGE_DIR / f"{user_uuid}.json"
 
 

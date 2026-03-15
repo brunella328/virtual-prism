@@ -62,12 +62,20 @@ async def rate_limit_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+_IS_PRODUCTION = os.getenv("ENV", "development") == "production"
+
+
 @app.middleware("http")
 async def api_key_middleware(request: Request, call_next):
     if request.method == "OPTIONS" or request.url.path in _PUBLIC_PATHS:
         return await call_next(request)
     expected = os.getenv("API_SECRET_KEY", "")
-    if expected and request.headers.get("X-Api-Key", "") != expected:
+    if not expected:
+        if _IS_PRODUCTION:
+            return JSONResponse({"detail": "Server misconfiguration"}, status_code=500)
+        # dev: allow through
+        return await call_next(request)
+    if request.headers.get("X-Api-Key", "") != expected:
         return JSONResponse({"detail": "Unauthorized"}, status_code=401)
     return await call_next(request)
 
@@ -88,9 +96,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Api-Key"],
 )
 
 app.include_router(genesis.router, prefix="/api/genesis", tags=["Genesis Engine"])

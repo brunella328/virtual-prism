@@ -5,6 +5,7 @@ Persona Storage Service
 每個 persona 存為獨立的 JSON 檔案：data/personas/{persona_id}.json
 """
 import json
+import re
 import os
 from typing import List, Optional
 from pathlib import Path
@@ -13,6 +14,15 @@ from app.models.persona import PersonaCard
 # 存儲目錄
 STORAGE_DIR = Path(__file__).parent.parent.parent / "data" / "personas"
 
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+)
+
+
+def _validate_id(persona_id: str) -> None:
+    if not _UUID_RE.match(persona_id):
+        raise ValueError(f"Invalid persona_id: {persona_id!r}")
+
 
 def ensure_storage_dir():
     """確保存儲目錄存在"""
@@ -20,6 +30,7 @@ def ensure_storage_dir():
 
 
 def save_persona(persona_id: str, persona: PersonaCard) -> None:
+    _validate_id(persona_id)
     """儲存 persona 到 JSON 檔案
     
     Args:
@@ -35,6 +46,7 @@ def save_persona(persona_id: str, persona: PersonaCard) -> None:
 
 
 def load_persona(persona_id: str) -> Optional[PersonaCard]:
+    _validate_id(persona_id)
     """從 JSON 檔案讀取 persona
     
     Args:
@@ -77,6 +89,7 @@ def list_personas() -> List[PersonaCard]:
 
 
 def delete_persona(persona_id: str) -> bool:
+    _validate_id(persona_id)
     """刪除 persona
     
     Args:
