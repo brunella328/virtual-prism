@@ -1,5 +1,7 @@
+import logging
 import os
 import time
+import uuid as _uuid
 from collections import defaultdict
 
 from dotenv import load_dotenv
@@ -11,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.api import genesis, life_stream, image, poc, auth
 
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Virtual Prism API",
@@ -30,15 +33,61 @@ _PUBLIC_PATHS = {
     "/api/auth/logout",
 }
 
-# Rate limiting: sliding window per key
-# key_by: "persona" = last path segment, "ip" = client IP
+# ---------------------------------------------------------------------------
+# Rate limiting — Redis (preferred) with in-memory fallback
+# ---------------------------------------------------------------------------
+# key_by: "persona" = last URL path segment, "ip" = client IP
 _RATE_LIMITS = {
     "/api/genesis/analyze-appearance":     {"max": 5,  "window": 60,   "key_by": "persona"},
     "/api/life-stream/generate-schedule/": {"max": 2,  "window": 60,   "key_by": "persona"},
     "/api/auth/register":                  {"max": 10, "window": 3600, "key_by": "ip"},
     "/api/auth/login":                     {"max": 10, "window": 900,  "key_by": "ip"},
 }
+
+# Try to connect to Redis; fall back to in-memory if REDIS_URL is absent or unreachable.
+_redis = None
+_redis_url = os.getenv("REDIS_URL", "")
+if _redis_url:
+    try:
+        import redis as _redis_module
+        _redis = _redis_module.from_url(_redis_url, decode_responses=True, socket_connect_timeout=2)
+        _redis.ping()
+        logger.info("Rate limiter: connected to Redis at %s", _redis_url.split("@")[-1])
+    except Exception as exc:
+        logger.warning("Rate limiter: Redis unavailable (%s) — falling back to in-memory", exc)
+        _redis = None
+else:
+    logger.info("Rate limiter: REDIS_URL not set — using in-memory store")
+
+# In-memory fallback store (single-process only)
 _rate_store: dict = defaultdict(list)
+
+
+def _is_rate_limited(key: str, max_req: int, window: int) -> bool:
+    """
+    Sliding-window rate check.
+    Returns True if the request should be rejected (limit exceeded).
+    Uses Redis sorted-set when available, in-memory list otherwise.
+    """
+    if _redis is not None:
+        now = time.time()
+        pipe = _redis.pipeline()
+        pipe.zremrangebyscore(key, "-inf", now - window)   # evict stale entries
+        pipe.zcard(key)                                     # count remaining
+        _, count = pipe.execute()
+        if count >= max_req:
+            return True
+        # Allow — record this request
+        _redis.zadd(key, {str(_uuid.uuid4()): now})
+        _redis.expire(key, window + 1)
+        return False
+    else:
+        now = time.monotonic()
+        _rate_store[key] = [t for t in _rate_store[key] if now - t < window]
+        if len(_rate_store[key]) >= max_req:
+            return True
+        _rate_store[key].append(now)
+        return False
 
 
 @app.middleware("http")
@@ -46,22 +95,27 @@ async def rate_limit_middleware(request: Request, call_next):
     path = request.url.path
     for prefix, limits in _RATE_LIMITS.items():
         if path.startswith(prefix):
-            client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown").split(",")[0].strip()
+            client_ip = (
+                request.headers
+                .get("X-Forwarded-For", request.client.host if request.client else "unknown")
+                .split(",")[0]
+                .strip()
+            )
             segment = path.split("/")[-1]
-            key = f"{prefix}:{client_ip if limits['key_by'] == 'ip' else (segment or client_ip)}"
-            now = time.monotonic()
-            window = limits["window"]
-            _rate_store[key] = [t for t in _rate_store[key] if now - t < window]
-            if len(_rate_store[key]) >= limits["max"]:
+            key = f"rl:{prefix}:{client_ip if limits['key_by'] == 'ip' else (segment or client_ip)}"
+            if _is_rate_limited(key, limits["max"], limits["window"]):
                 return JSONResponse(
-                    {"error": "rate_limit_exceeded", "detail": f"請求過於頻繁，請稍後再試"},
+                    {"error": "rate_limit_exceeded", "detail": "請求過於頻繁，請稍後再試"},
                     status_code=429,
-                    headers={"Retry-After": str(window)},
+                    headers={"Retry-After": str(limits["window"])},
                 )
-            _rate_store[key].append(now)
             break
     return await call_next(request)
 
+
+# ---------------------------------------------------------------------------
+# API key guard
+# ---------------------------------------------------------------------------
 
 _IS_PRODUCTION = os.getenv("ENV", "development") == "production"
 
@@ -74,12 +128,15 @@ async def api_key_middleware(request: Request, call_next):
     if not expected:
         if _IS_PRODUCTION:
             return JSONResponse({"detail": "Server misconfiguration"}, status_code=500)
-        # dev: allow through
         return await call_next(request)
     if request.headers.get("X-Api-Key", "") != expected:
         return JSONResponse({"detail": "Unauthorized"}, status_code=401)
     return await call_next(request)
 
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
 
 _default_origins = [
     "http://localhost:3000",
@@ -101,11 +158,15 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Api-Key"],
 )
 
-app.include_router(genesis.router, prefix="/api/genesis", tags=["Genesis Engine"])
-app.include_router(image.router, prefix="/api/image", tags=["Image Generation"])
-app.include_router(life_stream.router, prefix="/api/life-stream", tags=["Life Stream"])
-app.include_router(poc.router, prefix="/api", tags=["POC"])
-app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+
+app.include_router(genesis.router,     prefix="/api/genesis",      tags=["Genesis Engine"])
+app.include_router(image.router,       prefix="/api/image",        tags=["Image Generation"])
+app.include_router(life_stream.router, prefix="/api/life-stream",  tags=["Life Stream"])
+app.include_router(poc.router,         prefix="/api",              tags=["POC"])
+app.include_router(auth.router,        prefix="/api/auth",         tags=["Auth"])
 
 
 @app.get("/health")
@@ -114,4 +175,5 @@ async def health():
         "status": "ok",
         "service": "virtual-prism-api",
         "version": "0.1.0",
+        "rate_limiter": "redis" if _redis is not None else "memory",
     }
