@@ -1,8 +1,10 @@
+import asyncio
 import logging
 import os
 import time
 import uuid as _uuid
 from collections import defaultdict
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -12,13 +14,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import genesis, life_stream, image, poc, auth
+from app.services import backup_service
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start periodic backup scheduler as a background task
+    task = asyncio.create_task(backup_service.backup_scheduler())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
 
 app = FastAPI(
     title="Virtual Prism API",
     description="B2B AI 虛擬網紅自動化營運平台",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 _PUBLIC_PATHS = {
@@ -176,4 +193,14 @@ async def health():
         "service": "virtual-prism-api",
         "version": "0.1.0",
         "rate_limiter": "redis" if _redis is not None else "memory",
+        "backup": backup_service.get_status(),
     }
+
+
+@app.post("/api/admin/backup")
+async def trigger_backup():
+    """Manual on-demand backup (requires X-Api-Key header)."""
+    result = backup_service.run_backup()
+    if result == "ok":
+        return {"status": "ok", **backup_service.get_status()}
+    return JSONResponse({"status": "error", "detail": result}, status_code=500)

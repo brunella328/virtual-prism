@@ -10,7 +10,16 @@ import io
 import json
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
+from PIL import Image
 from starlette.testclient import TestClient
+
+
+def _make_jpeg() -> io.BytesIO:
+    """Return a valid 1×1 JPEG in an in-memory buffer."""
+    buf = io.BytesIO()
+    Image.new("RGB", (1, 1), color=(128, 128, 128)).save(buf, format="JPEG")
+    buf.seek(0)
+    return buf
 
 
 @pytest.fixture(scope="module")
@@ -64,14 +73,12 @@ class TestAnalyzeAppearance:
         fake_msg = _make_anthropic_message(FAKE_APPEARANCE_JSON)
 
         with patch(
-            "app.services.genesis_service.client_anthropic.messages.create",
-            new=AsyncMock(return_value=fake_msg),
-        ):
-            # Upload a minimal JPEG-like file
-            fake_image = io.BytesIO(b"\xff\xd8\xff" + b"\x00" * 100)
+            "app.services.genesis_service.client_anthropic",
+        ) as mock_client:
+            mock_client.messages.create = AsyncMock(return_value=fake_msg)
             resp = client.post(
                 "/api/genesis/analyze-appearance",
-                files=[("images", ("test.jpg", fake_image, "image/jpeg"))],
+                files=[("images", ("test.jpg", _make_jpeg(), "image/jpeg"))],
             )
 
         assert resp.status_code == 200
@@ -83,9 +90,8 @@ class TestAnalyzeAppearance:
 
     def test_analyze_appearance_too_many_images_returns_400(self, client):
         """More than 3 images → 400."""
-        fake_image = io.BytesIO(b"\xff\xd8\xff" + b"\x00" * 10)
         files = [
-            ("images", (f"img{i}.jpg", io.BytesIO(b"\xff\xd8\xff"), "image/jpeg"))
+            ("images", (f"img{i}.jpg", _make_jpeg(), "image/jpeg"))
             for i in range(4)
         ]
         resp = client.post("/api/genesis/analyze-appearance", files=files)
@@ -101,9 +107,9 @@ class TestCreatePersona:
         fake_msg = _make_anthropic_message(FAKE_PERSONA_JSON)
 
         with patch(
-            "app.services.genesis_service.client_anthropic.messages.create",
-            new=AsyncMock(return_value=fake_msg),
-        ):
+            "app.services.genesis_service.client_anthropic",
+        ) as mock_client:
+            mock_client.messages.create = AsyncMock(return_value=fake_msg)
             resp = client.post(
                 "/api/genesis/create-persona",
                 data={"description": "一個熱愛旅遊攝影的台灣女生，個性開朗真實"},
