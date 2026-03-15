@@ -45,13 +45,11 @@ async def analyze_appearance(
 async def create_persona(
     description: str = Form(...),
     persona_id: Optional[str] = Form(None),
-    ig_user_id: Optional[str] = Form(None),
     reference_image: Optional[UploadFile] = File(None),
 ):
     """T3: 人設稜鏡 — 一句話描述生成完整人設 JSON
 
     persona_id: optional, 自定義 persona ID
-    ig_user_id: optional, Instagram 用戶 ID（用於綁定）
     reference_image: optional, 參考人臉圖片（用於 InstantID）
 
     ⚠️ 此 API 會自動保存 persona 到存儲系統
@@ -72,7 +70,6 @@ async def create_persona(
         result = await genesis_service.create_persona(
             description=description,
             persona_id=persona_id,
-            ig_user_id=ig_user_id or persona_id  # ig_user_id 可能與 persona_id 相同
         )
 
         # 自動保存到存儲系統（T0-3 新增）

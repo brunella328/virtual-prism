@@ -5,8 +5,6 @@ POST /api/auth/register          — 註冊（email + password），寄驗證信
 POST /api/auth/login             — 登入，回傳 JWT（需已驗證 email）
 GET  /api/auth/verify-email      — 驗證 email（?token=xxx），回傳 JWT
 GET  /api/auth/me                — 當前用戶資訊（需 JWT）
-POST /api/auth/connect-ig        — 綁定 IG token
-DELETE /api/auth/disconnect-ig   — 解除 IG 綁定
 """
 import os
 import logging
@@ -19,7 +17,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
-from app.services import users_storage, instagram_service
+from app.services import users_storage
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -97,11 +95,6 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-
-
-class ConnectIGRequest(BaseModel):
-    ig_token: str
-    ig_user_id: str
 
 
 # ── Endpoints ────────────────────────────────────────────────
@@ -207,33 +200,4 @@ def me(current_user: dict = Depends(get_current_user)):
     return {
         "uuid": current_user["uuid"],
         "email": current_user["email"],
-        "has_ig_token": current_user.get("ig_token") is not None,
-        "ig_user_id": current_user.get("ig_user_id"),
     }
-
-
-@router.post("/connect-ig")
-def connect_ig(body: ConnectIGRequest, current_user: dict = Depends(get_current_user)):
-    user_uuid = current_user["uuid"]
-    updated = users_storage.update_ig_token(user_uuid, body.ig_token, body.ig_user_id)
-    if not updated:
-        raise HTTPException(status_code=404, detail="User not found")
-    # 同步更新 instagram_service token store，讓發布功能可用
-    instagram_service._token_store[user_uuid] = {
-        "access_token": body.ig_token,
-        "ig_account_id": body.ig_user_id,
-        "ig_username": "",
-        "expires_at": "2099-12-31T00:00:00+00:00",
-    }
-    instagram_service._save_token_store()
-    return {"status": "connected", "ig_user_id": body.ig_user_id}
-
-
-@router.delete("/disconnect-ig")
-def disconnect_ig(current_user: dict = Depends(get_current_user)):
-    user_uuid = current_user["uuid"]
-    users_storage.update_ig_token(user_uuid, None, None)
-    # 同步清除 instagram_service token store
-    instagram_service._token_store.pop(user_uuid, None)
-    instagram_service._save_token_store()
-    return {"status": "disconnected"}

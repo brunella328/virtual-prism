@@ -11,7 +11,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { email, igUsername, logout } = useUser()
+  const { email, logout } = useUser()
 
   const handleLogout = () => {
     logout()
@@ -43,11 +43,7 @@ export default function Navbar() {
 
           {/* Desktop: email + logout inline */}
           <div className="hidden sm:flex items-center gap-3">
-            {igUsername ? (
-              <span className="text-sm text-gray-500">@{igUsername}</span>
-            ) : email ? (
-              <span className="text-sm text-gray-500">{email}</span>
-            ) : null}
+            {email && <span className="text-sm text-gray-500">{email}</span>}
             <button
               onClick={handleLogout}
               className="text-xs text-gray-400 hover:text-black border border-gray-200 px-3 py-1.5 rounded-lg hover:border-gray-400 transition-colors"
@@ -59,11 +55,7 @@ export default function Navbar() {
 
         {/* Mobile: email + logout on second row */}
         <div className="flex sm:hidden items-center justify-end gap-3 pb-2">
-          {igUsername ? (
-            <span className="text-xs text-gray-500">@{igUsername}</span>
-          ) : email ? (
-            <span className="text-xs text-gray-500">{email}</span>
-          ) : null}
+          {email && <span className="text-xs text-gray-500">{email}</span>}
           <button
             onClick={handleLogout}
             className="text-xs text-gray-400 hover:text-black border border-gray-200 px-3 py-1.5 rounded-lg hover:border-gray-400 transition-colors"

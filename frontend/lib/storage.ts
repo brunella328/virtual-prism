@@ -4,14 +4,13 @@
  * 規則：
  * - 所有 localStorage key 集中定義在此，其他檔案不直接呼叫 localStorage
  * - 所有函數做 SSR guard（Next.js 在 hydration 時也會在 server side 跑 client component）
- * - vp_user_id = UUID（平台帳號 ID，不再是 IG account ID）
+ * - vp_user_id = UUID（平台帳號 ID）
  */
 
 const KEYS = {
   USER_ID: 'vp_user_id',
   EMAIL: 'vp_email',
   JWT_TOKEN: 'vp_jwt_token',
-  IG_USERNAME: 'vp_ig_username',
   APPEARANCE_PROMPT: 'vp_appearance_prompt',
   SCHEDULE: 'vp_schedule',
 } as const
@@ -47,10 +46,6 @@ export const storage = {
 
   getJwtToken: (): string | null => get(KEYS.JWT_TOKEN),
   setJwtToken: (token: string): void => set(KEYS.JWT_TOKEN, token),
-
-  // IG display (optional, only if IG connected)
-  getIgUsername: (): string | null => get(KEYS.IG_USERNAME),
-  setIgUsername: (username: string): void => set(KEYS.IG_USERNAME, username),
 
   // Image generation
   getAppearancePrompt: (): string => get(KEYS.APPEARANCE_PROMPT) ?? '',

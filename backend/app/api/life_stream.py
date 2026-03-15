@@ -84,10 +84,7 @@ async def generate_schedule(
         )
 
 def _verify_persona(persona_id: str):
-    """確認 persona_id 合法（非空字串即可）。
-    新流程：persona_id 為 UUID，不需要 IG token 才能使用排程功能。
-    IG token 只有在發布到 IG 時才需要（由 instagram.py 的 publish endpoint 檢查）。
-    """
+    """確認 persona_id 合法（非空字串即可）。"""
     if not persona_id or persona_id.strip() == "":
         raise HTTPException(status_code=400, detail="persona_id is required")
 

@@ -7,26 +7,24 @@ export default function DebugPage() {
 
   useEffect(() => {
     const vpUserId = localStorage.getItem('vp_user_id')
-    const vpUsername = localStorage.getItem('vp_ig_username')
+    const vpEmail = localStorage.getItem('vp_email')
     const vpPersonaId = localStorage.getItem('vp_persona_id')
-    
+
     setData({
       vp_user_id: vpUserId,
-      vp_ig_username: vpUsername,
+      vp_email: vpEmail,
       vp_persona_id: vpPersonaId,
     })
 
-    // Test API call
-    if (vpUserId) {
-      fetch(`http://localhost:8000/api/instagram/status?persona_id=${vpUserId}`)
-        .then(res => res.json())
-        .then(status => {
-          setData(prev => ({ ...prev, api_status: status }))
-        })
-        .catch(err => {
-          setData(prev => ({ ...prev, api_error: err.message }))
-        })
-    }
+    // Test API health
+    fetch(`http://localhost:8000/health`)
+      .then(res => res.json())
+      .then(status => {
+        setData((prev: any) => ({ ...prev, api_health: status }))
+      })
+      .catch(err => {
+        setData((prev: any) => ({ ...prev, api_error: err.message }))
+      })
   }, [])
 
   return (

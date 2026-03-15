@@ -9,7 +9,6 @@ import AddPostModal from '@/components/life-stream/AddPostModal'
 import Navbar from '@/components/Navbar'
 import ToastContainer from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
-import { getInstagramStatus, publishNow, scheduleInstagramPosts, cancelScheduledPost } from '@/lib/api'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -25,13 +24,12 @@ const STATUS_LABEL: Record<string, string> = {
 function DashboardInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { userId, jwtToken, isAuthenticated, isLoading, appearancePrompt, hasIgToken } = useUser()
+  const { userId, jwtToken, isAuthenticated, isLoading, appearancePrompt } = useUser()
   const { toasts, addToast, removeToast } = useToast()
 
   // Schedule state
   const [schedule, setSchedule] = useState<DayContent[]>([])
   const [loading, setLoading] = useState(true)
-  const [igConnected, setIgConnected] = useState(false)
 
   // Selected post + detail panel state
   const [selectedPost, setSelectedPost] = useState<DayContent | null>(null)
@@ -40,9 +38,6 @@ function DashboardInner() {
   const [editScenePrompt, setEditScenePrompt] = useState('')
   const [saving, setSaving] = useState(false)
   const [regenInstruction, setRegenInstruction] = useState('')
-  const [scheduleTime, setScheduleTime] = useState('')
-  const [confirmPublish, setConfirmPublish] = useState(false)
-  const [publishing, setPublishing] = useState(false)
 
   // Regen confirm state
   const [pendingRegen, setPendingRegen] = useState<{ post_id: string; image_url: string; image_prompt: string } | null>(null)
@@ -85,14 +80,11 @@ function DashboardInner() {
     ? (schedule.find(s => s.post_id === selectedPost.post_id) ?? selectedPost)
     : null
 
-  // Auth guard + IG status
+  // Auth guard
   useEffect(() => {
     if (isLoading) return
     if (!isAuthenticated) { router.replace('/onboarding'); return }
-    getInstagramStatus(userId!)
-      .then(s => setIgConnected(!!s.connected))
-      .catch(() => setIgConnected(false))
-  }, [isAuthenticated, isLoading, userId, router])
+  }, [isAuthenticated, isLoading, router])
 
   // Load schedule — if empty, generate today's post only
   useEffect(() => {
@@ -323,7 +315,6 @@ function DashboardInner() {
           markShared()
           addToast('已分享 ✓', 'success')
         } catch (shareErr) {
-          // AbortError = 用戶取消，不提示；其他錯誤 fallback 到下載
           if (shareErr instanceof Error && shareErr.name !== 'AbortError') {
             triggerDownload(blob)
             markShared()
@@ -335,76 +326,6 @@ function DashboardInner() {
       }
     } catch (e) {
       addToast(`無法取得圖片：${e instanceof Error ? e.message : String(e)}`, 'error')
-    }
-  }
-
-  // Publish now
-  const handlePublishNow = async (post_id: string) => {
-    const item = schedule.find(s => s.post_id === post_id)
-    if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
-    setPublishing(true)
-    try {
-      const result = await publishNow(userId, post_id, item.image_url, item.caption)
-      addToast(`發布成功 ✓ Media ID: ${result.media_id}`, 'success')
-      setConfirmPublish(false)
-      setSchedule(prev => {
-        const updated = prev.map(s => s.post_id === post_id ? { ...s, status: 'published' as const } : s)
-        storage.setSchedule(updated)
-        return updated
-      })
-      fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'published' }),
-      }).catch(() => {})
-    } catch (e) {
-      addToast(`發布失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
-    } finally {
-      setPublishing(false)
-    }
-  }
-
-  // Schedule post
-  const handleSchedulePost = async (post_id: string, publishAt: string) => {
-    const item = schedule.find(s => s.post_id === post_id)
-    if (!userId || !item?.image_url) { addToast('缺少圖片或帳號資料', 'error'); return }
-    try {
-      await scheduleInstagramPosts(userId, [{
-        post_id,
-        image_url: item.image_url,
-        caption: item.caption,
-        publish_at: new Date(publishAt).toISOString(),
-      }])
-      addToast(`已排程 ✓ ${new Date(publishAt).toLocaleString('zh-TW')}`, 'success')
-      setSchedule(prev => {
-        const updated = prev.map(s => s.post_id === post_id ? { ...s, scheduledAt: publishAt, status: 'scheduled' as const } : s)
-        storage.setSchedule(updated)
-        return updated
-      })
-    } catch (e) {
-      addToast(`排程失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
-    }
-  }
-
-  // Cancel schedule
-  const handleCancelSchedule = async (post_id: string, job_id: string) => {
-    try {
-      await cancelScheduledPost(job_id)
-      setSchedule(prev => {
-        const updated = prev.map(s => s.post_id === post_id
-          ? { ...s, status: 'draft' as const, scheduled_at: undefined, scheduledAt: undefined, job_id: undefined }
-          : s)
-        storage.setSchedule(updated)
-        return updated
-      })
-      fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'draft' }),
-      }).catch(() => {})
-      addToast('已取消排程', 'success')
-    } catch (e) {
-      addToast(`取消失敗：${e instanceof Error ? e.message : String(e)}`, 'error')
     }
   }
 
@@ -462,8 +383,6 @@ function DashboardInner() {
               onSelectPost={post => {
                 setSelectedPost(post)
                 setEditMode(false)
-                setConfirmPublish(false)
-                setScheduleTime(post.date ? `${post.date}T09:00` : '')
                 setRegenInstruction('')
               }}
             />
@@ -478,7 +397,7 @@ function DashboardInner() {
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/50 z-40"
-            onClick={() => { setSelectedPost(null); setEditMode(false); setConfirmPublish(false) }}
+            onClick={() => { setSelectedPost(null); setEditMode(false) }}
           />
           {/* Sheet */}
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto">
@@ -498,7 +417,7 @@ function DashboardInner() {
                   {STATUS_LABEL[selectedItem.status]}
                 </span>
                 <button
-                  onClick={() => { setSelectedPost(null); setEditMode(false); setConfirmPublish(false) }}
+                  onClick={() => { setSelectedPost(null); setEditMode(false) }}
                   className="text-gray-400 hover:text-gray-700 text-xl leading-none ml-1"
                 >✕</button>
               </div>
@@ -630,74 +549,16 @@ function DashboardInner() {
                 </div>
               )}
 
-              {/* Publish */}
+              {/* Share */}
               {selectedItem.status !== 'regenerating' && (
                 <div className="border-t pt-4 space-y-3">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">發布</p>
-                  {(selectedItem.scheduledAt || selectedItem.scheduled_at) ? (
-                    <div className="flex items-center justify-between bg-purple-50 rounded-xl px-4 py-3">
-                      <div>
-                        <p className="text-sm font-medium text-purple-800">待發布</p>
-                        <p className="text-xs text-purple-600">
-                          {new Date(selectedItem.scheduledAt || selectedItem.scheduled_at!).toLocaleString('zh-TW')}
-                        </p>
-                      </div>
-                      {selectedItem.job_id && (
-                        <button
-                          onClick={() => handleCancelSchedule(selectedItem.post_id, selectedItem.job_id!)}
-                          className="text-xs text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          取消排程
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      {/* Web Share（主要動作） */}
-                      <button
-                        onClick={() => handleWebShare(selectedItem.post_id)}
-                        className="w-full bg-black text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800"
-                      >
-                        分享到社交平台
-                      </button>
-
-                      {/* IG 直發（僅在已連結 IG 時顯示） */}
-                      {hasIgToken && (
-                        <>
-                          {confirmPublish ? (
-                            <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
-                              <p className="text-sm font-medium">確認立即發布到 Instagram？</p>
-                              {selectedItem.image_url && <img src={selectedItem.image_url} alt="" className="w-24 h-24 object-cover rounded-lg" />}
-                              <p className="text-xs text-gray-500 line-clamp-2">{selectedItem.caption}</p>
-                              <div className="flex gap-2">
-                                <button onClick={() => handlePublishNow(selectedItem.post_id)}
-                                  disabled={publishing}
-                                  className="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-60">
-                                  {publishing ? '發布中...' : '確認發布'}
-                                </button>
-                                <button onClick={() => setConfirmPublish(false)}
-                                  disabled={publishing}
-                                  className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-40">取消</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button onClick={() => setConfirmPublish(true)}
-                              className="w-full border py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50">直接發布到 Instagram</button>
-                          )}
-                          <div className="flex gap-2 items-center">
-                            <input type="datetime-local" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)}
-                              min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black" />
-                            <button
-                              onClick={() => { if (scheduleTime) { handleSchedulePost(selectedItem.post_id, scheduleTime); setScheduleTime('') } }}
-                              disabled={!scheduleTime}
-                              className="px-4 py-2 bg-black text-white rounded-lg text-sm hover:bg-gray-800 disabled:opacity-40"
-                            >排程</button>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
+                  <button
+                    onClick={() => handleWebShare(selectedItem.post_id)}
+                    className="w-full bg-black text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800"
+                  >
+                    分享到社交平台
+                  </button>
                 </div>
               )}
             </div>

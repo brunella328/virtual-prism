@@ -75,16 +75,15 @@ APPEARANCE_PROMPT = """你是一個專業的角色視覺分析師，專門為 AI
 1. image_prompt 必須極度詳細，讓 AI 生圖模型能在不同場景中生成同一個人
 2. hair 欄位使用範圍描述（如 \"long dark hair\"），避免過於具體（如 \"shoulder-length layered black hair\"），保留後續調整彈性"""
 
-async def create_persona(description: str, persona_id: Optional[str] = None, ig_user_id: Optional[str] = None) -> dict:
+async def create_persona(description: str, persona_id: Optional[str] = None) -> dict:
     """T3: 一句話 → 人設 JSON
-    
+
     Args:
         description: 一句話人設描述
         persona_id: 指定的 persona ID（若無則自動生成 UUID）
-        ig_user_id: 綁定的 IG 帳號 ID（可選）
     """
     from datetime import datetime
-    
+
     message = await client_anthropic.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=1024,
@@ -93,15 +92,14 @@ async def create_persona(description: str, persona_id: Optional[str] = None, ig_
         ],
         system=PERSONA_PROMPT
     )
-    
+
     raw = message.content[0].text
     persona_data = json.loads(raw)
     pid = persona_id or str(uuid.uuid4())
-    
+
     persona_card = PersonaCard(
         id=pid,
         **persona_data,
-        ig_user_id=ig_user_id,
         created_at=datetime.utcnow().isoformat() + "Z"
     )
     

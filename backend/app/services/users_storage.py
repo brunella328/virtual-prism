@@ -8,8 +8,6 @@ Schema:
   "uuid": "...",
   "email": "...",
   "hashed_password": "...",
-  "ig_token": null,
-  "ig_user_id": null,
   "email_verified": false,
   "verification_token": "...",
   "posts_generated": 0,
@@ -62,23 +60,11 @@ def create_user(email: str, hashed_password: str) -> dict:
         "uuid": str(uuid.uuid4()),
         "email": email.lower(),
         "hashed_password": hashed_password,
-        "ig_token": None,
-        "ig_user_id": None,
         "email_verified": False,
         "verification_token": str(uuid.uuid4()),
         "posts_generated": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    save_user(user)
-    return user
-
-
-def update_ig_token(user_uuid: str, ig_token: Optional[str], ig_user_id: Optional[str]) -> Optional[dict]:
-    user = get_user_by_uuid(user_uuid)
-    if not user:
-        return None
-    user["ig_token"] = ig_token
-    user["ig_user_id"] = ig_user_id
     save_user(user)
     return user
 

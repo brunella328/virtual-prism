@@ -5,7 +5,6 @@ import { useUser } from '@/contexts/UserContext'
 import Navbar from '@/components/Navbar'
 import ToastContainer from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
-import { cancelScheduledPost } from '@/lib/api'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -18,7 +17,6 @@ interface ScheduledPost {
   status: string
   scheduled_at?: string
   scheduledAt?: string
-  job_id?: string
   hashtags?: string[]
 }
 
@@ -49,9 +47,12 @@ export default function SchedulePage() {
   }, [isAuthenticated, isLoading, userId, router])
 
   const handleCancel = async (post: ScheduledPost) => {
-    if (!post.job_id) { addToast('找不到 job_id，無法取消', 'error'); return }
     try {
-      await cancelScheduledPost(post.job_id)
+      await fetch(`${API}/api/life-stream/schedule/${userId}/${post.post_id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'draft' }),
+      })
       setPosts(prev => prev.filter(p => p.post_id !== post.post_id))
       addToast('已取消排程', 'success')
     } catch (e) {

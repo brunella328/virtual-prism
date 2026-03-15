@@ -23,7 +23,6 @@ class PersonaCard(BaseModel):
     weekly_lifestyle: str
     appearance: Optional[AppearanceFeatures] = None
     reference_face_url: Optional[str] = None  # 人臉參考圖 URL（用於 InstantID）
-    ig_user_id: Optional[str] = None  # 綁定的 IG 帳號 ID
     created_at: Optional[str] = None  # 建立時間（ISO 8601 格式）
 
 class PersonaResponse(BaseModel):

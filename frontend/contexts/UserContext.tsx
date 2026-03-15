@@ -4,7 +4,7 @@
  *
  * 規則：
  * - Pages / components 只呼叫 useUser()，不直接碰 localStorage
- * - 任何 auth 狀態變更（login / logout / connectIg）必須透過此 context
+ * - 任何 auth 狀態變更（login / logout）必須透過此 context
  * - storage.ts 是唯一的 localStorage 入口
  */
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
@@ -20,8 +20,6 @@ interface UserState {
   userId: string | null      // UUID（平台帳號）
   email: string | null
   jwtToken: string | null
-  igUsername: string | null  // 僅在連結 IG 後有值
-  hasIgToken: boolean
   appearancePrompt: string
 }
 
@@ -32,8 +30,6 @@ export interface UserContextType extends UserState {
   loginWithEmail: (email: string, password: string) => Promise<void>
   /** Email + password 註冊，成功後回傳後端 message（需 email 驗證） */
   registerWithEmail: (email: string, password: string) => Promise<string>
-  /** IG OAuth 完成後呼叫（/auth/callback 頁面使用） */
-  connectIg: (igUsername: string) => void
   /** 登出：清除所有 state 與 localStorage */
   logout: () => void
   setAppearancePrompt: (prompt: string) => void
@@ -50,36 +46,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
     userId: null,
     email: null,
     jwtToken: null,
-    igUsername: null,
-    hasIgToken: false,
     appearancePrompt: '',
   })
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const userId = storage.getUserId()
-    const jwtToken = storage.getJwtToken()
     setState({
-      userId,
+      userId: storage.getUserId(),
       email: storage.getEmail(),
-      jwtToken,
-      igUsername: storage.getIgUsername(),
-      hasIgToken: false,
+      jwtToken: storage.getJwtToken(),
       appearancePrompt: storage.getAppearancePrompt(),
     })
-    // 若有 JWT，從後端確認 has_ig_token
-    if (userId && jwtToken) {
-      fetch(`${API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${jwtToken}` },
-      })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data) {
-            setState(prev => ({ ...prev, hasIgToken: data.has_ig_token ?? false }))
-          }
-        })
-        .catch(() => {})
-    }
     setIsLoading(false)
   }, [])
 
@@ -102,7 +79,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       userId: data.uuid,
       email: data.email,
       jwtToken: data.token,
-      hasIgToken: false,
     }))
   }, [])
 
@@ -117,13 +93,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || 'Registration failed')
     }
     const data = await res.json()
-    // 後端不再回傳 token，需先驗證 email 才能登入
     return data.message as string
-  }, [])
-
-  const connectIg = useCallback((igUsername: string) => {
-    storage.setIgUsername(igUsername)
-    setState(prev => ({ ...prev, igUsername, hasIgToken: true }))
   }, [])
 
   const logout = useCallback(() => {
@@ -132,8 +102,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       userId: null,
       email: null,
       jwtToken: null,
-      igUsername: null,
-      hasIgToken: false,
       appearancePrompt: '',
     })
   }, [])
@@ -150,7 +118,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       isLoading,
       loginWithEmail,
       registerWithEmail,
-      connectIg,
       logout,
       setAppearancePrompt,
     }}>
