@@ -27,6 +27,7 @@ _PUBLIC_PATHS = {
     "/api/auth/dev/reset-verification",
     "/api/auth/dev/force-verify",
     "/api/auth/dev/reset-quota",
+    "/api/auth/logout",
 }
 
 # Rate limiting: sliding window per key

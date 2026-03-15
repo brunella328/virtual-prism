@@ -31,7 +31,7 @@ export default function SchedulePage() {
     if (isLoading) return
     if (!isAuthenticated) { router.replace('/onboarding'); return }
 
-    fetch(`${API}/api/life-stream/schedule/${userId}`)
+    fetch(`${API}/api/life-stream/schedule/${userId}`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         const all: ScheduledPost[] = data.posts || []
@@ -50,6 +50,7 @@ export default function SchedulePage() {
     try {
       await fetch(`${API}/api/life-stream/schedule/${userId}/${post.post_id}/status`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'draft' }),
       })

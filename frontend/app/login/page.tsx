@@ -49,6 +49,7 @@ export default function LoginPage() {
     try {
       const res = await fetch(`${API_URL}/api/auth/resend-verification`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: '' }),
       })

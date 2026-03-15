@@ -10,7 +10,6 @@
 const KEYS = {
   USER_ID: 'vp_user_id',
   EMAIL: 'vp_email',
-  JWT_TOKEN: 'vp_jwt_token',
   APPEARANCE_PROMPT: 'vp_appearance_prompt',
   SCHEDULE: 'vp_schedule',
 } as const
@@ -43,9 +42,6 @@ export const storage = {
 
   getEmail: (): string | null => get(KEYS.EMAIL),
   setEmail: (email: string): void => set(KEYS.EMAIL, email),
-
-  getJwtToken: (): string | null => get(KEYS.JWT_TOKEN),
-  setJwtToken: (token: string): void => set(KEYS.JWT_TOKEN, token),
 
   // Image generation
   getAppearancePrompt: (): string => get(KEYS.APPEARANCE_PROMPT) ?? '',

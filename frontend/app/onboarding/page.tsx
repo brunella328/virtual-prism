@@ -52,7 +52,7 @@ export default function OnboardingPage() {
     if (isLoading) return
     if (!userId) { router.push('/login'); return }
 
-    fetch(`${API}/api/genesis/persona/${userId}`)
+    fetch(`${API}/api/genesis/persona/${userId}`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data) {
@@ -87,7 +87,7 @@ export default function OnboardingPage() {
       if (files && files.length > 0) {
         const formData = new FormData()
         Array.from(files).forEach(f => formData.append('images', f))
-        const res = await fetch(`${API}/api/genesis/analyze-appearance`, { method: 'POST', body: formData })
+        const res = await fetch(`${API}/api/genesis/analyze-appearance`, { method: 'POST', credentials: 'include', body: formData })
         const result = await res.json()
         localAppearance = result.appearance
         setAppearanceData(localAppearance)
@@ -98,7 +98,7 @@ export default function OnboardingPage() {
       if (userId) formData2.append('persona_id', userId)
       if (files && files.length > 0) formData2.append('reference_image', files[0])
 
-      const personaRes = await fetch(`${API}/api/genesis/create-persona`, { method: 'POST', body: formData2 })
+      const personaRes = await fetch(`${API}/api/genesis/create-persona`, { method: 'POST', credentials: 'include', body: formData2 })
       if (!personaRes.ok) throw new Error(`Persona API error: ${personaRes.status}`)
       const personaResult: PersonaResult = await personaRes.json()
       setPersona(personaResult)
@@ -133,6 +133,7 @@ export default function OnboardingPage() {
       try {
         const res = await fetch(`${API}/api/genesis/persona/${userId}`, {
           method: 'PATCH',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(editedPersona),
         })

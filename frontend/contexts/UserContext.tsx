@@ -19,7 +19,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 interface UserState {
   userId: string | null      // UUID（平台帳號）
   email: string | null
-  jwtToken: string | null
   appearancePrompt: string
 }
 
@@ -30,8 +29,8 @@ export interface UserContextType extends UserState {
   loginWithEmail: (email: string, password: string) => Promise<void>
   /** Email + password 註冊，成功後回傳後端 message（需 email 驗證） */
   registerWithEmail: (email: string, password: string) => Promise<string>
-  /** 登出：清除所有 state 與 localStorage */
-  logout: () => void
+  /** 登出：清除 HttpOnly cookie via backend + localStorage */
+  logout: () => Promise<void>
   setAppearancePrompt: (prompt: string) => void
 }
 
@@ -45,7 +44,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<UserState>({
     userId: null,
     email: null,
-    jwtToken: null,
     appearancePrompt: '',
   })
   const [isLoading, setIsLoading] = useState(true)
@@ -54,7 +52,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setState({
       userId: storage.getUserId(),
       email: storage.getEmail(),
-      jwtToken: storage.getJwtToken(),
       appearancePrompt: storage.getAppearancePrompt(),
     })
     setIsLoading(false)
@@ -63,6 +60,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const loginWithEmail = useCallback(async (email: string, password: string) => {
     const res = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     })
@@ -73,13 +71,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const data = await res.json()
     storage.setUserId(data.uuid)
     storage.setEmail(data.email)
-    storage.setJwtToken(data.token)
-    setState(prev => ({
-      ...prev,
-      userId: data.uuid,
-      email: data.email,
-      jwtToken: data.token,
-    }))
+    setState(prev => ({ ...prev, userId: data.uuid, email: data.email }))
   }, [])
 
   const registerWithEmail = useCallback(async (email: string, password: string): Promise<string> => {
@@ -96,14 +88,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return data.message as string
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {})
     storage.clearAll()
-    setState({
-      userId: null,
-      email: null,
-      jwtToken: null,
-      appearancePrompt: '',
-    })
+    setState({ userId: null, email: null, appearancePrompt: '' })
   }, [])
 
   const setAppearancePrompt = useCallback((prompt: string) => {
@@ -114,7 +102,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   return (
     <UserContext.Provider value={{
       ...state,
-      isAuthenticated: !!state.userId,
+      isAuthenticated: !!state.userId && !!state.email,
       isLoading,
       loginWithEmail,
       registerWithEmail,

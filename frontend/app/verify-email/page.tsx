@@ -23,12 +23,11 @@ function VerifyEmailInner() {
       return
     }
 
-    fetch(`${API_URL}/api/auth/verify-email?token=${token}`)
+    fetch(`${API_URL}/api/auth/verify-email?token=${token}`, { credentials: 'include' })
       .then(res => res.ok ? res.json() : res.json().then(e => Promise.reject(e.detail)))
       .then(data => {
         storage.setUserId(data.uuid)
         storage.setEmail(data.email)
-        storage.setJwtToken(data.token)
         setStatus('success')
         setTimeout(() => router.replace('/dashboard'), 2000)
       })

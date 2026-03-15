@@ -16,14 +16,15 @@ def _register(client, email=None, password="Testpass1"):
 
 
 def _verify(client, email):
-    """Manually mark a user as verified and return their JWT."""
+    """Manually mark a user as verified and log them in (sets auth cookie on client)."""
     from app.services import users_storage
     user = users_storage.get_user_by_email(email)
     user["email_verified"] = True
     user["verification_token"] = None
     users_storage.save_user(user)
     res = client.post("/api/auth/login", json={"email": email, "password": "Testpass1"})
-    return res.json()["token"]
+    assert res.status_code == 200
+    return res.json()["uuid"]
 
 
 def _cleanup(email):
@@ -61,8 +62,9 @@ def test_verify_email_token_flow(client):
     verify = client.get(f"/api/auth/verify-email?token={token}")
     assert verify.status_code == 200
     data = verify.json()
-    assert "token" in data
     assert data["email"] == email
+    assert "uuid" in data
+    # auth cookie is now set via Set-Cookie header (no token in body)
 
     # 驗證後可正常登入
     login = client.post("/api/auth/login", json={"email": email, "password": "Testpass1"})
@@ -105,20 +107,18 @@ def test_posts_generated_quota(client):
     from app.services import users_storage
 
     res, email = _register(client)
-    token = _verify(client, email)
+    user_uuid = _verify(client, email)   # login sets auth cookie on client
     user = users_storage.get_user_by_email(email)
 
     # 手動設定已生成 3 篇
     user["posts_generated"] = 3
     users_storage.save_user(user)
 
-    # generate-post 應回 403
-    import io
+    # generate-post 應回 403 (cookie auth is sent automatically by TestClient)
     form_data = {"date": "2026-03-15", "appearance_prompt": ""}
     res = client.post(
         f"/api/life-stream/generate-post/{user['uuid']}",
         data=form_data,
-        headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 403
     assert "上限" in res.json()["detail"]
@@ -143,15 +143,17 @@ def test_posts_generated_increments(client):
 
 # ── AC6: generate-post 需 JWT ─────────────────────────────────────────────────
 
-def test_generate_post_requires_jwt(client):
+def test_generate_post_requires_jwt(app):
+    # Use a fresh client with no auth cookie
+    from starlette.testclient import TestClient
     fake_id = str(uuid.uuid4())
-    import io
-    res = client.post(
-        f"/api/life-stream/generate-post/{fake_id}",
-        data={"date": "2026-03-15", "appearance_prompt": ""},
-    )
-    # 無 JWT → 401
-    assert res.status_code == 403 or res.status_code == 401
+    with TestClient(app, raise_server_exceptions=True) as fresh_client:
+        res = fresh_client.post(
+            f"/api/life-stream/generate-post/{fake_id}",
+            data={"date": "2026-03-15", "appearance_prompt": ""},
+        )
+    # 無 cookie → 401
+    assert res.status_code == 401
 
 
 # ── dev reset-verification ───────────────────────────────────────────────────

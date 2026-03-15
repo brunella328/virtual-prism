@@ -55,12 +55,15 @@ class TestApiKeyMiddleware:
         assert resp.status_code == 401
 
     def test_correct_api_key_passes_middleware(self, secured_client):
-        # Correct key passes middleware; HTTPBearer rejects missing JWT → 403
+        # Correct key passes middleware; cookie-based auth guard rejects missing
+        # cookie with detail "Not authenticated" — distinct from the middleware's
+        # "Unauthorized" rejection.
         resp = secured_client.get(
             "/api/auth/me",
             headers={"X-Api-Key": _API_KEY},
         )
-        assert resp.status_code != 401  # not rejected by middleware
+        # Middleware rejection would say "Unauthorized"; auth guard says "Not authenticated"
+        assert resp.json().get("detail") != "Unauthorized"
 
     def test_public_health_bypasses_auth(self, secured_client):
         resp = secured_client.get("/health")

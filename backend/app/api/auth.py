@@ -12,8 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import resend
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
@@ -45,8 +44,6 @@ SECRET_KEY = _raw_secret
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 14
 
-bearer_scheme = HTTPBearer()
-
 
 # ── 工具函式 ─────────────────────────────────────────────────
 def _hash_password(password: str) -> str:
@@ -62,9 +59,25 @@ def _create_token(user_uuid: str) -> str:
     return jwt.encode({"sub": user_uuid, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
+def _set_auth_cookie(response: Response, token: str) -> None:
+    """Attach HttpOnly auth cookie to a response."""
+    response.set_cookie(
+        key="token",
+        value=token,
+        httponly=True,
+        secure=_IS_PRODUCTION,           # HTTPS-only in production
+        samesite="none" if _IS_PRODUCTION else "lax",  # cross-origin in prod
+        max_age=ACCESS_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/",
+    )
+
+
+def get_current_user(request: Request) -> dict:
+    token = request.cookies.get("token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_uuid: str = payload.get("sub")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -152,7 +165,7 @@ def dev_reset_verification(body: LoginRequest):
 
 
 @router.post("/dev/force-verify")
-def dev_force_verify(body: LoginRequest):
+def dev_force_verify(body: LoginRequest, response: Response):
     """DEV：直接驗證帳號，回傳 JWT（跳過 email 流程）"""
     if _IS_PRODUCTION:
         raise HTTPException(status_code=404, detail="Not found")
@@ -163,7 +176,8 @@ def dev_force_verify(body: LoginRequest):
     user["verification_token"] = None
     users_storage.save_user(user)
     token = _create_token(user["uuid"])
-    return {"message": f"{body.email} 已強制驗證", "token": token, "uuid": user["uuid"]}
+    _set_auth_cookie(response, token)
+    return {"message": f"{body.email} 已強制驗證", "uuid": user["uuid"]}
 
 
 @router.post("/dev/reset-quota")
@@ -201,16 +215,17 @@ def resend_verification(body: LoginRequest):
 
 
 @router.get("/verify-email")
-def verify_email(token: str):
+def verify_email(token: str, response: Response):
     user = users_storage.verify_email(token)
     if not user:
         raise HTTPException(status_code=400, detail="驗證連結無效或已過期")
     jwt_token = _create_token(user["uuid"])
-    return {"token": jwt_token, "uuid": user["uuid"], "email": user["email"]}
+    _set_auth_cookie(response, jwt_token)
+    return {"uuid": user["uuid"], "email": user["email"]}
 
 
 @router.post("/login")
-def login(body: LoginRequest):
+def login(body: LoginRequest, response: Response):
     user = users_storage.get_user_by_email(body.email)
     if not user or not _verify_password(body.password, user["hashed_password"]):
         raise HTTPException(status_code=401, detail="Email 或密碼錯誤")
@@ -218,7 +233,14 @@ def login(body: LoginRequest):
         raise HTTPException(status_code=403, detail="請先驗證 Email，再回來登入。驗證信已寄至你的信箱。")
 
     token = _create_token(user["uuid"])
-    return {"token": token, "uuid": user["uuid"], "email": user["email"]}
+    _set_auth_cookie(response, token)
+    return {"uuid": user["uuid"], "email": user["email"]}
+
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(key="token", path="/", samesite="none" if _IS_PRODUCTION else "lax")
+    return {"message": "Logged out"}
 
 
 @router.get("/me")

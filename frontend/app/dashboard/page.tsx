@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
 function DashboardInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { userId, jwtToken, isAuthenticated, isLoading, appearancePrompt } = useUser()
+  const { userId, isAuthenticated, isLoading, appearancePrompt } = useUser()
   const { toasts, addToast, removeToast } = useToast()
 
   // Schedule state
@@ -89,7 +89,7 @@ function DashboardInner() {
   // Load schedule — if empty, generate today's post only
   useEffect(() => {
     if (!userId) return
-    fetch(`${API}/api/life-stream/schedule/${userId}`)
+    fetch(`${API}/api/life-stream/schedule/${userId}`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         const posts = data.posts || []
@@ -132,7 +132,7 @@ function DashboardInner() {
       fd.append('appearance_prompt', appearancePrompt || '')
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
-        headers: jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {},
+        credentials: 'include',
         body: fd,
       })
       if (!res.ok) {
@@ -171,7 +171,7 @@ function DashboardInner() {
       if (refImage) fd.append('reference_image', refImage)
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
-        headers: jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {},
+        credentials: 'include',
         body: fd,
       })
       if (!res.ok) {
@@ -214,6 +214,7 @@ function DashboardInner() {
       if (regenRefImage) fd.append('reference_image', regenRefImage)
       const res = await fetch(`${API}/api/life-stream/regenerate/${post_id}`, {
         method: 'POST',
+        credentials: 'include',
         body: fd,
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -242,6 +243,7 @@ function DashboardInner() {
     try {
       const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/image`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_url, image_prompt }),
       })
@@ -258,6 +260,7 @@ function DashboardInner() {
     try {
       const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/content`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ caption, scene_prompt: scenePrompt }),
       })
@@ -304,6 +307,7 @@ function DashboardInner() {
         })
         fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/status`, {
           method: 'PATCH',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'shared' }),
         }).catch(() => {})
