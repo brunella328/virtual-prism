@@ -259,7 +259,7 @@ export default function WeekCalendar({
                   {/* 確認彈窗 */}
                   {confirmPublish ? (
                     <div className="border rounded-xl p-4 space-y-3 bg-gray-50">
-                      <p className="text-sm font-medium">確認立即發布到 Instagram？</p>
+                      <p className="text-sm font-medium">確認立即發布？</p>
                       {selectedItem.image_url && (
                         <img src={selectedItem.image_url} alt="" className="w-24 h-24 object-cover rounded-lg" />
                       )}
