@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '@/contexts/UserContext'
 import { storage } from '@/lib/storage'
+import { apiHeaders } from '@/lib/api'
 import MonthCalendar, { type DayContent } from '@/components/life-stream/MonthCalendar'
 import AddPostModal from '@/components/life-stream/AddPostModal'
 import Navbar from '@/components/Navbar'
@@ -89,7 +90,7 @@ function DashboardInner() {
   // Load schedule — if empty, generate today's post only
   useEffect(() => {
     if (!userId) return
-    fetch(`${API}/api/life-stream/schedule/${userId}`, { credentials: 'include' })
+    fetch(`${API}/api/life-stream/schedule/${userId}`, { credentials: 'include', headers: apiHeaders() })
       .then(r => r.json())
       .then(data => {
         const posts = data.posts || []
@@ -133,6 +134,7 @@ function DashboardInner() {
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
         credentials: 'include',
+        headers: apiHeaders(),
         body: fd,
       })
       if (!res.ok) {
@@ -172,6 +174,7 @@ function DashboardInner() {
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
         credentials: 'include',
+        headers: apiHeaders(),
         body: fd,
       })
       if (!res.ok) {
@@ -215,6 +218,7 @@ function DashboardInner() {
       const res = await fetch(`${API}/api/life-stream/regenerate/${post_id}`, {
         method: 'POST',
         credentials: 'include',
+        headers: apiHeaders(),
         body: fd,
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -244,7 +248,7 @@ function DashboardInner() {
       const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/image`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ image_url, image_prompt }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -261,7 +265,7 @@ function DashboardInner() {
       const res = await fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/content`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ caption, scene_prompt: scenePrompt }),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -308,7 +312,7 @@ function DashboardInner() {
         fetch(`${API}/api/life-stream/schedule/${userId}/${post_id}/status`, {
           method: 'PATCH',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ status: 'shared' }),
         }).catch(() => {})
       }

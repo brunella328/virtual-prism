@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { apiHeaders } from '@/lib/api'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -32,7 +33,8 @@ export default function ModelComparisonPage() {
     try {
       const res = await fetch(`${API}/api/poc/model-comparison`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ prompt, seed }),
       })
 

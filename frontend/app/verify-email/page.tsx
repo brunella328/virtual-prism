@@ -2,6 +2,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { storage } from '@/lib/storage'
+import { apiHeaders } from '@/lib/api'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -23,7 +24,7 @@ function VerifyEmailInner() {
       return
     }
 
-    fetch(`${API_URL}/api/auth/verify-email?token=${token}`, { credentials: 'include' })
+    fetch(`${API_URL}/api/auth/verify-email?token=${token}`, { credentials: 'include', headers: apiHeaders() })
       .then(res => res.ok ? res.json() : res.json().then(e => Promise.reject(e.detail)))
       .then(data => {
         storage.setUserId(data.uuid)

@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@/contexts/UserContext'
+import { apiHeaders } from '@/lib/api'
 import Navbar from '@/components/Navbar'
 import ToastContainer from '@/components/Toast'
 import { useToast } from '@/hooks/useToast'
@@ -31,7 +32,7 @@ export default function SchedulePage() {
     if (isLoading) return
     if (!isAuthenticated) { router.replace('/onboarding'); return }
 
-    fetch(`${API}/api/life-stream/schedule/${userId}`, { credentials: 'include' })
+    fetch(`${API}/api/life-stream/schedule/${userId}`, { credentials: 'include', headers: apiHeaders() })
       .then(r => r.json())
       .then(data => {
         const all: ScheduledPost[] = data.posts || []
@@ -51,7 +52,7 @@ export default function SchedulePage() {
       await fetch(`${API}/api/life-stream/schedule/${userId}/${post.post_id}/status`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status: 'draft' }),
       })
       setPosts(prev => prev.filter(p => p.post_id !== post.post_id))

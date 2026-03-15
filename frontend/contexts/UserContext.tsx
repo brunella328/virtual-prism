@@ -9,6 +9,7 @@
  */
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { storage } from '@/lib/storage'
+import { apiHeaders } from '@/lib/api'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -61,7 +62,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const res = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ email, password }),
     })
     if (!res.ok) {
@@ -77,7 +78,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const registerWithEmail = useCallback(async (email: string, password: string): Promise<string> => {
     const res = await fetch(`${API_URL}/api/auth/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ email, password }),
     })
     if (!res.ok) {
@@ -89,7 +90,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
-    await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {})
+    await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include', headers: apiHeaders() }).catch(() => {})
     storage.clearAll()
     setState({ userId: null, email: null, appearancePrompt: '' })
   }, [])
