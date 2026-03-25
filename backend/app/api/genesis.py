@@ -44,14 +44,28 @@ async def create_persona(
     description: str = Form(...),
     persona_id: Optional[str] = Form(None),
     reference_image: Optional[UploadFile] = File(None),
+    content_types: Optional[str] = Form(None),
 ):
     """T3: 人設稜鏡 — 一句話描述生成完整人設 JSON
 
     persona_id: optional, 自定義 persona ID
     reference_image: optional, 參考人臉圖片（用於 InstantID）
+    content_types: optional, 預設內容類型（JSON array string，例如：["educational","entertainment"]）
 
     ⚠️ 此 API 會自動保存 persona 到存儲系統
     """
+    # 解析 content_types（若提供）- 在 try 外處理以正確返回 400
+    content_types_list = None
+    if content_types:
+        try:
+            import json as json_module
+            content_types_list = json_module.loads(content_types)
+            # 驗證是否為 list
+            if not isinstance(content_types_list, list):
+                raise HTTPException(400, "content_types must be a JSON array")
+        except json_module.JSONDecodeError:
+            raise HTTPException(400, "Invalid JSON format for content_types")
+    
     try:
         # 處理參考圖片 — 上傳到 Cloudinary 取得永久公開 URL
         reference_face_url = None
@@ -68,6 +82,7 @@ async def create_persona(
         result = await genesis_service.create_persona(
             description=description,
             persona_id=persona_id,
+            content_types=content_types_list,
         )
 
         # 自動保存到存儲系統（T0-3 新增）
@@ -79,6 +94,10 @@ async def create_persona(
         import anthropic
         logger.error(f"create_persona failed: {type(e).__name__}: {str(e)}")
 
+        # Re-raise HTTPException (including validation errors)
+        if isinstance(e, HTTPException):
+            raise
+        
         # 特殊處理 Claude API 錯誤
         if isinstance(e, anthropic.RateLimitError):
             raise HTTPException(
@@ -137,6 +156,7 @@ class PersonaUpdateRequest(BaseModel):
     speech_pattern: Optional[str] = None
     values: Optional[List[str]] = None
     weekly_lifestyle: Optional[str] = None
+    content_types: Optional[List[str]] = None
 
 
 @router.patch("/persona/{persona_id}")

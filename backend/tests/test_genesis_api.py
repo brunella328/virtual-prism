@@ -128,6 +128,74 @@ class TestCreatePersona:
         """Missing form field → FastAPI validation 422."""
         resp = client.post("/api/genesis/create-persona", data={})
         assert resp.status_code == 422
+    
+    def test_create_persona_with_content_types(self, client):
+        """Test creating persona with content_types parameter."""
+        fake_msg = _make_anthropic_message(FAKE_PERSONA_JSON)
+
+        with patch(
+            "app.services.genesis_service.client_anthropic",
+        ) as mock_client:
+            mock_client.messages.create = AsyncMock(return_value=fake_msg)
+            resp = client.post(
+                "/api/genesis/create-persona",
+                data={
+                    "description": "一個熱愛旅遊攝影的台灣女生，個性開朗真實",
+                    "content_types": json.dumps(["educational", "entertainment"])
+                },
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "persona" in data
+        persona = data["persona"]
+        assert "content_types" in persona
+        assert persona["content_types"] == ["educational", "entertainment"]
+    
+    def test_create_persona_with_single_content_type(self, client):
+        """Test creating persona with single content_type."""
+        fake_msg = _make_anthropic_message(FAKE_PERSONA_JSON)
+
+        with patch(
+            "app.services.genesis_service.client_anthropic",
+        ) as mock_client:
+            mock_client.messages.create = AsyncMock(return_value=fake_msg)
+            resp = client.post(
+                "/api/genesis/create-persona",
+                data={
+                    "description": "教育工作者",
+                    "content_types": json.dumps(["educational"])
+                },
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        persona = data["persona"]
+        assert persona["content_types"] == ["educational"]
+    
+    def test_create_persona_invalid_content_types_json_returns_400(self, client):
+        """Invalid JSON format for content_types should return 400."""
+        resp = client.post(
+            "/api/genesis/create-persona",
+            data={
+                "description": "test",
+                "content_types": "not-a-json"
+            },
+        )
+        assert resp.status_code == 400
+        assert "Invalid JSON format" in resp.json()["detail"]
+    
+    def test_create_persona_content_types_not_array_returns_400(self, client):
+        """content_types must be an array."""
+        resp = client.post(
+            "/api/genesis/create-persona",
+            data={
+                "description": "test",
+                "content_types": json.dumps("educational")  # string instead of array
+            },
+        )
+        assert resp.status_code == 400
+        assert "must be a JSON array" in resp.json()["detail"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

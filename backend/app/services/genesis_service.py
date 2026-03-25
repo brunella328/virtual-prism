@@ -75,12 +75,13 @@ APPEARANCE_PROMPT = """你是一個專業的角色視覺分析師，專門為 AI
 1. image_prompt 必須極度詳細，讓 AI 生圖模型能在不同場景中生成同一個人
 2. hair 欄位使用範圍描述（如 \"long dark hair\"），避免過於具體（如 \"shoulder-length layered black hair\"），保留後續調整彈性"""
 
-async def create_persona(description: str, persona_id: Optional[str] = None) -> dict:
+async def create_persona(description: str, persona_id: Optional[str] = None, content_types: Optional[list] = None) -> dict:
     """T3: 一句話 → 人設 JSON
 
     Args:
         description: 一句話人設描述
         persona_id: 指定的 persona ID（若無則自動生成 UUID）
+        content_types: 預設內容類型列表（1-3 個）
     """
     from datetime import datetime
 
@@ -100,6 +101,7 @@ async def create_persona(description: str, persona_id: Optional[str] = None) -> 
     persona_card = PersonaCard(
         id=pid,
         **persona_data,
+        content_types=content_types,
         created_at=datetime.utcnow().isoformat() + "Z"
     )
     
