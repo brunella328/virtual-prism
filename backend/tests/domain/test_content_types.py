@@ -84,6 +84,7 @@ class TestExamplePostGeneration:
     async def test_confirm_persona_generates_example_post(self):
         """confirm_persona 应该自动产出图文范例"""
         from datetime import datetime
+        from app.models.persona import AppearanceFeatures
 
         # 模拟 Persona
         persona_id = str(uuid.uuid4())
@@ -97,19 +98,20 @@ class TestExamplePostGeneration:
             weekly_lifestyle="充实",
             content_types=["entertainment"],
             reference_face_url="https://example.com/face.jpg",
-            appearance={
-                "facial_features": "friendly",
-                "skin_tone": "fair",
-                "hair": "long",
-                "body": "athletic",
-                "style": "casual",
-                "image_prompt": "casual person"
-            },
+            appearance=AppearanceFeatures(
+                facial_features="friendly",
+                skin_tone="fair",
+                hair="long",
+                body="athletic",
+                style="casual",
+                image_prompt="casual person"
+            ),
             created_at=datetime.utcnow().isoformat() + "Z"
         )
 
         with patch('app.services.genesis_service.client_anthropic') as mock_client, \
-             patch('app.services.comfyui_service') as mock_comfy, \
+             patch('app.services.comfyui_service.generate_image', new_callable=AsyncMock) as mock_gen_image, \
+             patch('app.services.comfyui_service.build_realism_prompt', return_value="mocked full prompt") as mock_build, \
              patch('app.services.cloudinary_service.upload_from_url', new_callable=AsyncMock) as mock_upload:
 
             # 模拟 Claude 生成文案
@@ -118,7 +120,7 @@ class TestExamplePostGeneration:
             ))
 
             # 模拟图片生成
-            mock_comfy.generate_image = AsyncMock(return_value="https://replicate.com/img.png")
+            mock_gen_image.return_value = "https://replicate.com/img.png"
             mock_upload.return_value = "https://cloudinary.com/img.png"
 
             # 执行 confirm_persona
@@ -170,6 +172,7 @@ class TestContentGenerationWithContentType:
     async def test_generate_post_uses_persona_default_content_type(self):
         """未指定 content_type 时应使用 Persona 预设值"""
         from app.services.persona_storage import save_persona, delete_persona
+        from app.models.persona import AppearanceFeatures
         from datetime import datetime
 
         # 准备测试 Persona
@@ -184,7 +187,10 @@ class TestContentGenerationWithContentType:
             weekly_lifestyle="充实",
             content_types=["entertainment", "engagement"],  # 预设
             reference_face_url="https://example.com/face.jpg",
-            appearance=MagicMock(image_prompt="test prompt"),
+            appearance=AppearanceFeatures(
+                facial_features="friendly", skin_tone="fair", hair="long",
+                body="athletic", style="casual", image_prompt="test prompt"
+            ),
             created_at=datetime.utcnow().isoformat() + "Z"
         )
         save_persona(persona_id, persona)
@@ -216,6 +222,7 @@ class TestContentGenerationWithContentType:
     async def test_generate_post_can_override_content_type(self):
         """用户可覆盖 Persona 预设，选择其他 content_type"""
         from app.services.persona_storage import save_persona, delete_persona
+        from app.models.persona import AppearanceFeatures
         from datetime import datetime
 
         persona_id = str(uuid.uuid4())
@@ -229,7 +236,10 @@ class TestContentGenerationWithContentType:
             weekly_lifestyle="充实",
             content_types=["entertainment"],  # 预设
             reference_face_url="https://example.com/face.jpg",
-            appearance=MagicMock(image_prompt="test prompt"),
+            appearance=AppearanceFeatures(
+                facial_features="friendly", skin_tone="fair", hair="long",
+                body="athletic", style="casual", image_prompt="test prompt"
+            ),
             created_at=datetime.utcnow().isoformat() + "Z"
         )
         save_persona(persona_id, persona)
@@ -331,18 +341,23 @@ class TestContentTypeEndToEndFlow:
                 assert persona_result["persona"].content_types == ["educational", "engagement"]
 
             # Step 2: confirm_persona 应产出范例（模拟）
+            from app.models.persona import AppearanceFeatures
             persona = persona_result["persona"]
             persona.reference_face_url = "https://example.com/face.jpg"
-            persona.appearance = MagicMock(image_prompt="test person")
+            persona.appearance = AppearanceFeatures(
+                facial_features="friendly", skin_tone="fair", hair="long",
+                body="athletic", style="casual", image_prompt="test person"
+            )
 
             with patch('app.services.genesis_service.client_anthropic') as mock_client, \
-                 patch('app.services.comfyui_service') as mock_comfy, \
+                 patch('app.services.comfyui_service.generate_image', new_callable=AsyncMock) as mock_gen_image, \
+                 patch('app.services.comfyui_service.build_realism_prompt', return_value="mocked full prompt"), \
                  patch('app.services.cloudinary_service.upload_from_url', new_callable=AsyncMock) as mock_upload:
 
                 mock_client.messages.create = AsyncMock(return_value=MagicMock(
                     content=[MagicMock(text='{"scene":"测试","caption":"测试","scene_prompt":"test","hashtags":["#测试"]}')]
                 ))
-                mock_comfy.generate_image = AsyncMock(return_value="https://replicate.com/img.png")
+                mock_gen_image.return_value = "https://replicate.com/img.png"
                 mock_upload.return_value = "https://cloudinary.com/img.png"
 
                 confirmed = await genesis_service.confirm_persona(persona)
