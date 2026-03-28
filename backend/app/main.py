@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -211,6 +211,26 @@ class QuotaAdjustRequest(BaseModel):
     email: str
     add: int = 0        # 加額度：posts_generated -= add（最低為 0）
     reset: bool = False # 歸零：posts_generated = 0
+
+
+class ForceVerifyRequest(BaseModel):
+    email: str
+
+
+@app.post("/api/admin/force-verify")
+def admin_force_verify(body: ForceVerifyRequest, response: Response):
+    """Admin：強制驗證帳號並回傳 JWT（需要 X-Api-Key header）"""
+    from app.services import users_storage
+    from app.api.auth import _create_token, _set_auth_cookie
+    user = users_storage.get_user_by_email(body.email)
+    if not user:
+        return JSONResponse({"detail": f"User not found: {body.email}"}, status_code=404)
+    user["email_verified"] = True
+    user["verification_token"] = None
+    users_storage.save_user(user)
+    token = _create_token(user["uuid"])
+    _set_auth_cookie(response, token)
+    return {"message": f"{body.email} 已強制驗證", "uuid": user["uuid"]}
 
 @app.post("/api/admin/quota/adjust")
 def admin_quota_adjust(body: QuotaAdjustRequest):
