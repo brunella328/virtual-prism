@@ -31,6 +31,7 @@ function DashboardInner() {
   // Schedule state
   const [schedule, setSchedule] = useState<DayContent[]>([])
   const [loading, setLoading] = useState(true)
+  const [personaContentTypes, setPersonaContentTypes] = useState<string[]>([])
 
   // Selected post + detail panel state
   const [selectedPost, setSelectedPost] = useState<DayContent | null>(null)
@@ -87,9 +88,20 @@ function DashboardInner() {
     if (!isAuthenticated) { router.replace('/onboarding'); return }
   }, [isAuthenticated, isLoading, router])
 
-  // Load schedule — if empty, generate today's post only
+  // Load schedule + persona — if empty, generate today's post only
   useEffect(() => {
     if (!userId) return
+
+    // Load persona to get content_types
+    fetch(`${API}/api/genesis/persona/${userId}`, { credentials: 'include', headers: apiHeaders() })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.persona?.content_types) {
+          setPersonaContentTypes(data.persona.content_types)
+        }
+      })
+      .catch(() => {})
+
     fetch(`${API}/api/life-stream/schedule/${userId}`, { credentials: 'include', headers: apiHeaders() })
       .then(r => r.json())
       .then(data => {
@@ -162,7 +174,7 @@ function DashboardInner() {
   }
 
   // Add post for a specific date (from calendar click)
-  const handleAddPost = async (hint: string, refImage: File | null) => {
+  const handleAddPost = async (hint: string, refImage: File | null, contentType: string | null) => {
     if (!addPostDate || !userId) return
     setAddPostLoading(true)
     try {
@@ -171,6 +183,7 @@ function DashboardInner() {
       fd.append('appearance_prompt', appearancePrompt || '')
       fd.append('user_hint', hint)
       if (refImage) fd.append('reference_image', refImage)
+      if (contentType) fd.append('content_type', contentType)
       const res = await fetch(`${API}/api/life-stream/generate-post/${userId}`, {
         method: 'POST',
         credentials: 'include',
@@ -578,8 +591,9 @@ function DashboardInner() {
       {addPostDate && (
         <AddPostModal
           date={addPostDate}
+          personaContentTypes={personaContentTypes}
           loading={addPostLoading}
-          onConfirm={(hint, refImage) => handleAddPost(hint, refImage)}
+          onConfirm={(hint, refImage, contentType) => handleAddPost(hint, refImage, contentType)}
           onCancel={() => setAddPostDate(null)}
         />
       )}

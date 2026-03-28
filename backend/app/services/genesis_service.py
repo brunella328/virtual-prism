@@ -189,6 +189,129 @@ async def analyze_appearance(images, image_urls: Optional[list] = None) -> dict:
         "reference_face_url": reference_face_url
     }
 
+async def generate_example_post(persona: PersonaCard) -> dict:
+    """為 Persona 產出圖文範例貼文
+    
+    Args:
+        persona: PersonaCard 物件
+    
+    Returns:
+        包含 scene, caption, scene_prompt, hashtags, image_url 的 dict
+    """
+    from datetime import datetime
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # 使用第一個 content_type，若無則使用 "personal_story"
+    content_type = None
+    if persona.content_types and len(persona.content_types) > 0:
+        content_type = persona.content_types[0]
+    
+    content_type_label = {
+        "educational": "知識分享",
+        "entertainment": "娛樂互動",
+        "promotional": "產品推廣",
+        "engagement": "社群互動",
+        "personal_story": "個人故事",
+    }.get(content_type, "日常分享")
+    
+    # 構建 prompt（類似 SINGLE_POST_PROMPT）
+    from app.services.life_stream_service import SCENE_PROMPT_FIELD, SCENE_PROMPT_QUALITY_GUIDE
+    
+    persona_dict = persona.model_dump(exclude={"reference_face_url", "created_at", "id", "example_post"})
+    
+    example_post_prompt = f"""你是一個 AI 網紅內容規劃師。
+根據以下人設 JSON，為這個 AI 網紅規劃 1 篇 Instagram 圖文範例，展示該人設的風格與內容類型（{content_type_label}）。
+
+**重要：必須用繁體中文，且只輸出單一 JSON 物件，不要任何前綴說明或註解！**
+
+輸出格式（嚴格的 JSON 物件）：
+{{
+  "scene": "場景描述（中文，25字以內）",
+  "caption": "Instagram 文案（中文，含 1-2 個 emoji，80字以內）",
+  {SCENE_PROMPT_FIELD},
+  "hashtags": ["#tag1", "#tag2", "#tag3"]
+}}
+
+{SCENE_PROMPT_QUALITY_GUIDE}"""
+    
+    # Step 1: LLM 規劃內容
+    try:
+        message = await client_anthropic.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=512,
+            messages=[{
+                "role": "user",
+                "content": f"請為以下人設規劃 1 篇 Instagram 範例內容（內容類型：{content_type_label}）：\n{json.dumps(persona_dict, ensure_ascii=False)}"
+            }],
+            system=example_post_prompt,
+        )
+        
+        # 解析 JSON
+        from app.services.life_stream_service import _extract_json_from_claude
+        post_data = _extract_json_from_claude(message.content[0].text, start_char="{")
+        
+    except Exception as e:
+        logger.error(f"Example post LLM generation failed: {e}")
+        # 返回簡化版本，不生成圖片
+        return {
+            "scene": "日常生活",
+            "caption": f"{persona.name} 的日常分享 ✨",
+            "scene_prompt": "lifestyle photo, casual moment",
+            "hashtags": ["#日常", "#生活"],
+            "image_url": None,
+            "image_prompt": None,
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+        }
+    
+    # Step 2: 生成圖片（若有 reference_face_url 和 appearance）
+    image_url = None
+    full_prompt = None
+    
+    if persona.reference_face_url and persona.appearance:
+        try:
+            from app.services import comfyui_service
+            from app.services.cloudinary_service import upload_from_url
+            from app.services.life_stream_service import _infer_camera_style
+            
+            scene_prompt = post_data.get("scene_prompt", "lifestyle photo")
+            camera_style = _infer_camera_style(scene_prompt)
+            
+            base_prompt = persona.appearance.image_prompt or "attractive person, high quality, realistic"
+            full_prompt = comfyui_service.build_realism_prompt(
+                character_desc=base_prompt,
+                scene_prompt=scene_prompt,
+                camera_style=camera_style,
+            )
+            
+            # 生成圖片
+            replicate_url = await comfyui_service.generate_image(
+                prompt=full_prompt,
+                seed=-1,
+                face_image_url=persona.reference_face_url,
+                camera_style=camera_style,
+            )
+            
+            if replicate_url:
+                # 上傳到 Cloudinary
+                try:
+                    image_url = await upload_from_url(replicate_url, folder=f"virtual_prism/{persona.id}/example")
+                except Exception as cdn_err:
+                    logger.warning(f"Cloudinary upload failed for example post, using Replicate URL: {cdn_err}")
+                    image_url = replicate_url
+        
+        except Exception as img_err:
+            logger.error(f"Example post image generation failed: {img_err}")
+            # 圖片生成失敗，但仍返回文字內容
+    
+    return {
+        **post_data,
+        "image_url": image_url,
+        "image_prompt": full_prompt,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
 async def confirm_persona(persona: PersonaCard, reference_face_url: Optional[str] = None) -> dict:
     """T4: 鎖定人設，儲存至存儲系統
     
@@ -197,6 +320,8 @@ async def confirm_persona(persona: PersonaCard, reference_face_url: Optional[str
         reference_face_url: 人臉參考圖 URL（用於 InstantID）
     """
     from datetime import datetime
+    import logging
+    logger = logging.getLogger(__name__)
     
     persona_id = persona.id or str(uuid.uuid4())
     
@@ -205,6 +330,19 @@ async def confirm_persona(persona: PersonaCard, reference_face_url: Optional[str
         persona.created_at = datetime.utcnow().isoformat() + "Z"
     if reference_face_url and not persona.reference_face_url:
         persona.reference_face_url = reference_face_url
+    
+    # T3: 自動產出圖文範例（若 content_types 不為空）
+    if persona.content_types and len(persona.content_types) > 0:
+        try:
+            logger.info(f"Generating example post for persona {persona_id}...")
+            example_data = await generate_example_post(persona)
+            
+            from app.models.persona import ExamplePost
+            persona.example_post = ExamplePost(**example_data)
+            logger.info(f"Example post generated successfully for persona {persona_id}")
+        except Exception as e:
+            logger.error(f"Failed to generate example post for persona {persona_id}: {e}")
+            # 範例產出失敗不影響 persona 建立，繼續執行
     
     # 儲存 persona 到檔案系統
     from app.services.persona_storage import save_persona

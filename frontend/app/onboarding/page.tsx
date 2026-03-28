@@ -16,6 +16,16 @@ interface AppearanceData {
   image_prompt: string
 }
 
+interface ExamplePost {
+  scene: string
+  caption: string
+  scene_prompt: string
+  hashtags: string[]
+  image_url?: string
+  image_prompt?: string
+  generated_at?: string
+}
+
 interface PersonaResult {
   persona_id: string
   persona: {
@@ -26,6 +36,8 @@ interface PersonaResult {
     values: string[]
     weekly_lifestyle: string
     reference_face_url?: string
+    content_types?: string[]
+    example_post?: ExamplePost
   }
 }
 
@@ -41,6 +53,7 @@ export default function OnboardingPage() {
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<FileList | null>(null)
   const [previews, setPreviews] = useState<string[]>([])
+  const [contentTypes, setContentTypes] = useState<string[]>([])
 
   // Step 3/4 — 結果
   const [appearanceData, setAppearanceData] = useState<AppearanceData | null>(null)
@@ -98,6 +111,7 @@ export default function OnboardingPage() {
       formData2.append('description', description)
       if (userId) formData2.append('persona_id', userId)
       if (files && files.length > 0) formData2.append('reference_image', files[0])
+      if (contentTypes.length > 0) formData2.append('content_types', JSON.stringify(contentTypes))
 
       const personaRes = await fetch(`${API}/api/genesis/create-persona`, { method: 'POST', credentials: 'include', headers: apiHeaders(), body: formData2 })
       if (!personaRes.ok) throw new Error(`Persona API error: ${personaRes.status}`)
@@ -220,6 +234,27 @@ export default function OnboardingPage() {
               className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
             />
           </div>
+          {editedPersona.content_types && editedPersona.content_types.length > 0 && (
+            <div className="flex items-start gap-2">
+              <span className="font-medium text-sm w-20 shrink-0 pt-1">內容類型</span>
+              <div className="flex-1 flex flex-wrap gap-1.5">
+                {editedPersona.content_types.map((type, i) => {
+                  const labels: Record<string, string> = {
+                    educational: '📚 知識分享',
+                    entertainment: '🎉 娛樂互動',
+                    promotional: '📢 產品推廣',
+                    engagement: '💬 社群互動',
+                    personal_story: '📖 個人故事',
+                  }
+                  return (
+                    <span key={i} className="px-2 py-1 bg-gray-100 rounded text-xs">
+                      {labels[type] || type}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           <button
             onClick={handleSavePersona}
             disabled={isSaving}
@@ -242,6 +277,38 @@ export default function OnboardingPage() {
             <div className="mt-3 pt-3 border-t border-blue-100">
               <p className="text-xs font-medium text-blue-600 mb-1">生圖 Prompt</p>
               <p className="text-xs text-gray-500 leading-relaxed">{appearanceData.image_prompt}</p>
+            </div>
+          </div>
+        )}
+
+        {editedPersona.example_post && (
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 mb-4">
+            <h3 className="text-xs font-semibold text-purple-600 uppercase tracking-wide mb-3">✨ 圖文範例</h3>
+            {editedPersona.example_post.image_url && (
+              <img
+                src={editedPersona.example_post.image_url}
+                alt="Example post"
+                className="w-full rounded-lg mb-3 shadow-md"
+              />
+            )}
+            <div className="space-y-2">
+              <div className="text-sm">
+                <span className="font-medium text-purple-700">場景：</span>
+                <span className="text-gray-700">{editedPersona.example_post.scene}</span>
+              </div>
+              <div className="text-sm">
+                <span className="font-medium text-purple-700">文案：</span>
+                <p className="text-gray-700 mt-1 leading-relaxed">{editedPersona.example_post.caption}</p>
+              </div>
+              {editedPersona.example_post.hashtags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {editedPersona.example_post.hashtags.map((tag, i) => (
+                    <span key={i} className="text-xs px-2 py-1 bg-white rounded-full text-purple-600">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -305,6 +372,49 @@ export default function OnboardingPage() {
             className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-black"
             required
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            內容類型 <span className="text-gray-400 text-xs">(選擇 1-3 種)</span>
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[
+              { value: 'educational', label: '📚 知識分享' },
+              { value: 'entertainment', label: '🎉 娛樂互動' },
+              { value: 'promotional', label: '📢 產品推廣' },
+              { value: 'engagement', label: '💬 社群互動' },
+              { value: 'personal_story', label: '📖 個人故事' },
+            ].map(type => {
+              const isSelected = contentTypes.includes(type.value)
+              const canSelect = contentTypes.length < 3 || isSelected
+              return (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() => {
+                    if (isSelected) {
+                      setContentTypes(contentTypes.filter(t => t !== type.value))
+                    } else if (canSelect) {
+                      setContentTypes([...contentTypes, type.value])
+                    }
+                  }}
+                  className={`
+                    px-4 py-2.5 rounded-lg text-sm font-medium transition-all
+                    ${isSelected
+                      ? 'bg-black text-white'
+                      : canSelect
+                        ? 'border border-gray-300 hover:border-black hover:bg-gray-50'
+                        : 'border border-gray-200 text-gray-300 cursor-not-allowed'
+                    }
+                  `}
+                  disabled={!canSelect}
+                >
+                  {type.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <button type="submit" disabled={!description}

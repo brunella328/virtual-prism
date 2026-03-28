@@ -11,8 +11,8 @@ from app.services.life_stream_service import (
     _infer_camera_style,
     _extract_json_from_claude,
     _generate_and_upload_image,
+    _build_single_post_prompt,
     SCENE_PROMPT_QUALITY_GUIDE,
-    SINGLE_POST_PROMPT,
     SCHEDULE_PROMPT,
 )
 
@@ -101,9 +101,19 @@ class TestScenePromptQualityGuide:
 
     def test_single_post_prompt_embeds_quality_guide(self):
         # This test would have caught the original bug
+        # Test default prompt (no content_type)
+        single_post_prompt_default = _build_single_post_prompt()
         for element in self.REQUIRED_ELEMENTS:
-            assert element in SINGLE_POST_PROMPT, \
-                f"SINGLE_POST_PROMPT missing quality element: {element}"
+            assert element in single_post_prompt_default, \
+                f"SINGLE_POST_PROMPT (default) missing quality element: {element}"
+        
+        # Test with content_type
+        single_post_prompt_edu = _build_single_post_prompt("educational")
+        for element in self.REQUIRED_ELEMENTS:
+            assert element in single_post_prompt_edu, \
+                f"SINGLE_POST_PROMPT (educational) missing quality element: {element}"
+        assert "知識分享" in single_post_prompt_edu, \
+            "SINGLE_POST_PROMPT should include content type description"
 
 
 # ---------------------------------------------------------------------------

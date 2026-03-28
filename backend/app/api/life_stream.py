@@ -94,10 +94,16 @@ async def generate_post(
     date: str = Form(...),
     appearance_prompt: str = Form(""),
     user_hint: str = Form(""),
+    content_type: Optional[str] = Form(None),
     reference_image: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
 ):
-    """月曆模式：為指定日期生成單篇貼文（append，不覆蓋現有排程）"""
+    """月曆模式：為指定日期生成單篇貼文（append，不覆蓋現有排程）
+    
+    Args:
+        content_type: 內容類型（educational/entertainment/promotional/engagement/personal_story），
+                     若無傳入則使用 Persona 預設 content_types[0]
+    """
     _verify_persona(persona_id)
     generated = current_user.get("posts_generated", 0)
     if generated >= POST_QUOTA:
@@ -111,6 +117,14 @@ async def generate_post(
         date_type.fromisoformat(date)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"日期格式錯誤，請使用 YYYY-MM-DD：{date}")
+    # 驗證 content_type（若提供）
+    if content_type:
+        allowed_types = ['educational', 'entertainment', 'promotional', 'engagement', 'personal_story']
+        if content_type not in allowed_types:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid content_type: {content_type}. Allowed: {', '.join(allowed_types)}"
+            )
     # 驗證每日上限（3 篇）
     from app.services.schedule_storage import load_schedule
     existing = load_schedule(persona_id)
@@ -129,6 +143,7 @@ async def generate_post(
             appearance_prompt=appearance_prompt or "",
             user_hint=user_hint or "",
             reference_image_url=ref_url,
+            content_type=content_type,
         )
         users_storage.increment_posts_generated(current_user["uuid"], 1)
         return post

@@ -74,8 +74,22 @@ SCENE_PROMPT_FIELD = (
     '但要描述當下的狀態細節"'
 )
 
-SINGLE_POST_PROMPT = f"""你是一個 AI 網紅內容規劃師。
-根據以下人設 JSON，為這個 AI 網紅規劃 1 篇 Instagram 圖文內容。
+CONTENT_TYPE_STYLES = {
+    "educational": "知識分享 — 清晰解說，條列重點，提供實用資訊",
+    "entertainment": "娛樂互動 — 輕鬆幽默，互動性強，讓人會心一笑",
+    "promotional": "產品推廣 — 吸睛文案，CTA 明確，突顯價值主張",
+    "engagement": "社群互動 — 提問互動，引發討論，鼓勵留言分享",
+    "personal_story": "個人故事 — 故事敘事，情感共鳴，真實動人",
+}
+
+def _build_single_post_prompt(content_type: Optional[str] = None) -> str:
+    """根據內容類型建構 prompt"""
+    content_type_guide = ""
+    if content_type and content_type in CONTENT_TYPE_STYLES:
+        content_type_guide = f"\n\n**內容類型**：{CONTENT_TYPE_STYLES[content_type]}\n文案必須符合此類型的語氣與結構。"
+    
+    return f"""你是一個 AI 網紅內容規劃師。
+根據以下人設 JSON，為這個 AI 網紅規劃 1 篇 Instagram 圖文內容。{content_type_guide}
 
 **重要：必須用繁體中文，且只輸出單一 JSON 物件，不要任何前綴說明或註解！**
 
@@ -246,8 +260,18 @@ async def generate_single_post(
     appearance_prompt: str = "",
     user_hint: str = "",
     reference_image_url: str = "",
+    content_type: Optional[str] = None,
 ) -> dict:
-    """月曆模式：為指定日期生成單篇貼文並 append 到排程"""
+    """月曆模式：為指定日期生成單篇貼文並 append 到排程
+    
+    Args:
+        persona_id: Persona ID
+        date: 日期 (YYYY-MM-DD)
+        appearance_prompt: 外觀描述 prompt（可選）
+        user_hint: 使用者提示（可選）
+        reference_image_url: 參考圖片 URL（可選）
+        content_type: 內容類型（可選，若無則使用 Persona 預設）
+    """
     persona_data = load_persona(persona_id)
     if not persona_data:
         raise ValueError(f"Persona {persona_id} 不存在。")
@@ -260,17 +284,25 @@ async def generate_single_post(
         or "attractive person, high quality, realistic"
     )
 
+    # 決定使用的 content_type：優先使用傳入值，否則使用 Persona 預設
+    effective_content_type = content_type
+    if not effective_content_type and persona_data.content_types and len(persona_data.content_types) > 0:
+        effective_content_type = persona_data.content_types[0]
+
     # 分析參考圖場景（僅用於 prompt 增強，不影響人臉）
     ref_scene_desc = ""
     if reference_image_url:
         ref_scene_desc = await _analyze_reference_image(reference_image_url)
 
-    # Step 1: LLM 規劃 1 篇內容
+    # Step 1: LLM 規劃 1 篇內容（使用動態 prompt）
     user_content = f"請為以下人設規劃 1 篇 Instagram 內容（日期：{date}）：\n{json.dumps(persona, ensure_ascii=False)}"
     if user_hint:
         user_content += f"\n使用者偏好：{user_hint}"
     if ref_scene_desc:
         user_content += f"\n參考圖場景描述：{ref_scene_desc}"
+    
+    single_post_prompt = _build_single_post_prompt(effective_content_type)
+    
     message = await client.messages.create(
         model="claude-3-haiku-20240307",
         max_tokens=512,
@@ -278,7 +310,7 @@ async def generate_single_post(
             "role": "user",
             "content": user_content,
         }],
-        system=SINGLE_POST_PROMPT,
+        system=single_post_prompt,
     )
     item = _extract_json_from_claude(message.content[0].text, start_char="{")
 

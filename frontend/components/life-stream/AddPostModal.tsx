@@ -3,7 +3,8 @@ import { useState } from 'react'
 
 interface AddPostModalProps {
   date: string               // "2026-03-15"
-  onConfirm: (hint: string, refImage: File | null) => void
+  personaContentTypes?: string[]  // Persona 預設內容類型
+  onConfirm: (hint: string, refImage: File | null, contentType: string | null) => void
   onCancel: () => void
   loading: boolean
 }
@@ -13,10 +14,23 @@ function formatDateLabel(dateStr: string): string {
   return d.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
-export default function AddPostModal({ date, onConfirm, onCancel, loading }: AddPostModalProps) {
+export default function AddPostModal({ date, personaContentTypes, onConfirm, onCancel, loading }: AddPostModalProps) {
   const [hint, setHint] = useState('')
   const [refImage, setRefImage] = useState<File | null>(null)
   const [refPreview, setRefPreview] = useState<string | null>(null)
+  const [contentType, setContentType] = useState<string | null>(
+    personaContentTypes && personaContentTypes.length > 0 ? personaContentTypes[0] : null
+  )
+
+  const contentTypeLabels: Record<string, string> = {
+    educational: '📚 知識分享',
+    entertainment: '🎉 娛樂互動',
+    promotional: '📢 產品推廣',
+    engagement: '💬 社群互動',
+    personal_story: '📖 個人故事',
+  }
+
+  const contentTypeOptions = ['educational', 'entertainment', 'promotional', 'engagement', 'personal_story']
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -31,6 +45,37 @@ export default function AddPostModal({ date, onConfirm, onCancel, loading }: Add
         <p className="text-xs text-gray-400">
           AI 將根據你的人設自動規劃場景、文案並生成圖片，約需 30–60 秒。
         </p>
+
+        <div>
+          <label className="block text-xs font-medium mb-2 text-gray-600">
+            內容類型 {personaContentTypes && personaContentTypes.length > 0 && (
+              <span className="text-gray-400 font-normal">(預設: {contentTypeLabels[personaContentTypes[0]]})</span>
+            )}
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {contentTypeOptions.map(type => {
+              const isSelected = contentType === type
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setContentType(type)}
+                  disabled={loading}
+                  className={`
+                    px-2 py-1.5 rounded-lg text-xs font-medium transition-all
+                    ${isSelected
+                      ? 'bg-black text-white'
+                      : 'border border-gray-300 hover:border-black hover:bg-gray-50'
+                    }
+                    disabled:opacity-50
+                  `}
+                >
+                  {contentTypeLabels[type]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         <div className="space-y-3">
           <input
@@ -66,7 +111,7 @@ export default function AddPostModal({ date, onConfirm, onCancel, loading }: Add
 
         <div className="flex gap-3">
           <button
-            onClick={() => onConfirm(hint, refImage)}
+            onClick={() => onConfirm(hint, refImage, contentType)}
             disabled={loading}
             className="flex-1 bg-black text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
           >
