@@ -12,6 +12,7 @@ load_dotenv()
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from app.api import genesis, life_stream, image, poc, auth
 from app.services import backup_service
@@ -204,3 +205,30 @@ async def trigger_backup():
     if result == "ok":
         return {"status": "ok", **backup_service.get_status()}
     return JSONResponse({"status": "error", "detail": result}, status_code=500)
+
+
+class QuotaAdjustRequest(BaseModel):
+    email: str
+    add: int = 0        # 加額度：posts_generated -= add（最低為 0）
+    reset: bool = False # 歸零：posts_generated = 0
+
+@app.post("/api/admin/quota/adjust")
+def admin_quota_adjust(body: QuotaAdjustRequest):
+    """Admin：調整用戶 quota（需要 X-Api-Key header）"""
+    from app.services import users_storage
+    if not body.add and not body.reset:
+        return JSONResponse({"detail": "add 或 reset 至少提供一個"}, status_code=400)
+    user = users_storage.get_user_by_email(body.email)
+    if not user:
+        return JSONResponse({"detail": f"User not found: {body.email}"}, status_code=404)
+    before = user.get("posts_generated", 0)
+    if body.reset:
+        user["posts_generated"] = 0
+    elif body.add:
+        user["posts_generated"] = max(0, before - body.add)
+    users_storage.save_user(user)
+    return {
+        "email": body.email,
+        "posts_generated_before": before,
+        "posts_generated_after": user["posts_generated"],
+    }
