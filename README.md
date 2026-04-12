@@ -83,6 +83,25 @@ npm run dev
 
 目前專案處於 MVP 開發階段，核心功能持續迭代中。
 
+## Architecture
+
+Virtual Prism is built on a Next.js 14 frontend and a Python FastAPI backend. The core pipeline flows from user auth → persona onboarding → AI content planning (Claude) → image generation (Replicate/flux) → scheduling → Instagram Graph API publishing, with a draft-mode auto-reply system on top.
+
+For the complete architecture diagram covering all flows and subsystems, see **[docs/architecture-flow.md](docs/architecture-flow.md)**.
+
+High-level overview:
+
+```mermaid
+flowchart LR
+    A([Auth]) --> B([Onboarding\nPersona Setup])
+    B --> C([Dashboard\nCalendar])
+    C --> D[Claude\nContent Planner]
+    D --> E[Replicate\nImage Gen]
+    E --> F([Review &\nSchedule])
+    F --> G{{Instagram\nGraph API}}
+    G --> H([Auto-Reply\nDraft Mode])
+```
+
 ## 相關連結
 
 - [Epic Issue](https://github.com/brunella328/my-first-business/issues/25)
