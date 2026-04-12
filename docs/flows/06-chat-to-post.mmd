@@ -1,0 +1,18 @@
+flowchart TD
+
+    %% ⚠️ Coming Soon — 聊天發文 (Chat-to-Post) flow is not yet implemented.
+
+    classDef screen   fill:#7c3aed,color:#fff,stroke:#5b21b6,rx:8
+    classDef api      fill:#1d4ed8,color:#fff,stroke:#1e3a8a,rx:4
+    classDef ext      fill:#d97706,color:#fff,stroke:#92400e,rx:4
+    classDef store    fill:#15803d,color:#fff,stroke:#14532d,rx:4
+    classDef soon     fill:#9ca3af,color:#fff,stroke:#6b7280,rx:4,stroke-dasharray:6 3
+
+    F1([User enters topic]):::soon
+    F2["AI asks clarifying\nquestions"]:::soon
+    F3([User answers]):::soon
+    F4["AI synthesises\nideas"]:::soon
+    F5([Draft edit screen]):::soon
+    F6([Schedule / publish]):::soon
+
+    F1 --> F2 --> F3 --> F4 --> F5 --> F6

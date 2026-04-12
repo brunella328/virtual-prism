@@ -87,7 +87,7 @@ npm run dev
 
 Virtual Prism is built on a Next.js 14 frontend and a Python FastAPI backend. The core pipeline flows from user auth → persona onboarding → AI content planning (Claude) → image generation (Replicate/flux) → scheduling → Instagram Graph API publishing, with a draft-mode auto-reply system on top.
 
-For the complete architecture diagram covering all flows and subsystems, see **[docs/architecture-flow.md](docs/architecture-flow.md)**.
+For the complete architecture covering all flows and subsystems, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Individual per-flow Mermaid diagrams live under [`docs/flows/`](docs/flows/).
 
 High-level overview:
 
@@ -106,3 +106,9 @@ flowchart LR
 
 - [Epic Issue](https://github.com/brunella328/my-first-business/issues/25)
 - [執行追蹤 Project](https://github.com/users/brunella328/projects/4)
+
+## 系統架構
+
+完整的產品架構流程圖請參考 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
+架構文件包含 10 個獨立的 Mermaid 流程圖，涵蓋認證、入門設定、貼文生成、聊天發文、排程發布、自動回覆等完整流程。

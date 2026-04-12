@@ -1,0 +1,34 @@
+flowchart TD
+    A([貼文 approved]) --> B[(schedule.json\nstatus=approved\nscheduled_at=T)]
+
+    subgraph OAUTH ["Instagram OAuth 流程"]
+        C([用戶點擊「連結 Instagram」]) --> D[GET /api/auth/instagram\n導向 Meta OAuth]
+        D --> E([Meta 授權頁])
+        E --> F[用戶同意授權]
+        F --> G[POST /api/auth/instagram/callback\n取得 code]
+        G --> H[換取長效 Token\n60 天有效]
+        H --> I[(儲存 access_token\n到 Persona)]
+    end
+
+    B --> J[APScheduler\n每分鐘掃描 schedule.json]
+    J --> K{到達 scheduled_at?}
+    K -->|否| J
+    K -->|是| L{Token 有效?}
+    L -->|否| M[⚠️ 通知用戶\n重新授權]
+    M --> C
+    L -->|是| N[POST graph.facebook.com\n/media — 上傳圖片]
+    N --> O[POST graph.facebook.com\n/media_publish — 發布]
+    O --> P[status = published\n記錄 instagram_media_id]
+    P --> Q([✅ 發布完成])
+
+    classDef screen fill:#7c3aed,color:#fff,stroke:#6d28d9
+    classDef api fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6
+    classDef external fill:#3b1f0a,color:#fcd34d,stroke:#f59e0b
+    classDef storage fill:#064e3b,color:#6ee7b7,stroke:#10b981
+    classDef decision fill:#1a1a1a,color:#f0f0f0,stroke:#444
+
+    class A,C,E,Q screen
+    class D,G,H,N,O api
+    class F,M external
+    class B,I,P storage
+    class K,L decision

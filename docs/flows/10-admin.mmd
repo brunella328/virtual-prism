@@ -1,0 +1,42 @@
+flowchart TD
+    A([Admin Dashboard]) --> B{管理操作}
+
+    B --> C[配額管理]
+    B --> D[用戶管理]
+    B --> E[系統維護]
+
+    C --> C1[GET /api/admin/quota\n查看各用戶配額]
+    C1 --> C2{調整配額?}
+    C2 -->|是| C3[PATCH /api/admin/quota/:user_id\n設定 monthly_limit]
+    C3 --> C4[(更新 user.quota\n寫入 DB)]
+    C2 -->|否| B
+
+    D --> D1[GET /api/admin/users\n用戶清單]
+    D1 --> D2{用戶操作}
+    D2 -->|強制驗證| D3[PATCH /api/admin/users/:id\nforce_verify=true]
+    D2 -->|停用帳號| D4[PATCH /api/admin/users/:id\nstatus=suspended]
+    D2 -->|重置密碼| D5[POST /api/admin/users/:id/reset-password]
+    D3 & D4 & D5 --> D6[(更新用戶狀態\nDB)]
+    D6 --> B
+
+    E --> E1[備份 Cron\n每日 02:00]
+    E1 --> E2[pg_dump → S3\n加密備份]
+    E2 --> E3[備份清單\n保留 30 天]
+
+    E --> E4[健康檢查\nGET /api/health]
+    E4 --> E5{服務狀態}
+    E5 -->|✅ 正常| B
+    E5 -->|⚠️ 異常| E6[⚠️ Slack 告警\n通知管理員]
+    E6 --> B
+
+    classDef screen fill:#7c3aed,color:#fff,stroke:#6d28d9
+    classDef api fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6
+    classDef external fill:#3b1f0a,color:#fcd34d,stroke:#f59e0b
+    classDef storage fill:#064e3b,color:#6ee7b7,stroke:#10b981
+    classDef decision fill:#1a1a1a,color:#f0f0f0,stroke:#444
+
+    class A screen
+    class C1,C3,D1,D3,D4,D5,E4 api
+    class E1,E2,E6 external
+    class C4,D6,E3 storage
+    class B,C2,D2,E5 decision

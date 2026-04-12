@@ -1,0 +1,34 @@
+flowchart TD
+    A([APScheduler\n每 5 分鐘輪詢]) --> B[GET graph.facebook.com\n/media/:id/comments]
+    B --> C{有新留言?}
+    C -->|否| A
+    C -->|是| D[過濾已回覆 / 黑名單]
+
+    D --> E{留言需要回覆?}
+    E -->|否| A
+    E -->|是| F[Claude Haiku\n依 Persona 語氣生成回覆草稿]
+
+    F --> G[暫存回覆草稿\n待審核佇列]
+    G --> H([通知用戶\n有待審核回覆])
+
+    H --> I{用戶決定}
+    I -->|✅ 核准| J[POST graph.facebook.com\n/comment — 發布回覆]
+    I -->|✏️ 編輯後核准| K[用戶修改草稿]
+    K --> J
+    I -->|❌ 拒絕| L[丟棄草稿]
+
+    J --> M[記錄 replied_at\n更新留言狀態]
+    M --> A
+    L --> A
+
+    classDef screen fill:#7c3aed,color:#fff,stroke:#6d28d9
+    classDef api fill:#1e3a5f,color:#93c5fd,stroke:#3b82f6
+    classDef external fill:#3b1f0a,color:#fcd34d,stroke:#f59e0b
+    classDef storage fill:#064e3b,color:#6ee7b7,stroke:#10b981
+    classDef decision fill:#1a1a1a,color:#f0f0f0,stroke:#444
+
+    class H,I screen
+    class F,G api
+    class A,B,J external
+    class M storage
+    class C,D,E decision

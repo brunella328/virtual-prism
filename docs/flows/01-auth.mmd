@@ -1,0 +1,28 @@
+flowchart TD
+
+    classDef screen   fill:#7c3aed,color:#fff,stroke:#5b21b6,rx:8
+    classDef api      fill:#1d4ed8,color:#fff,stroke:#1e3a8a,rx:4
+    classDef ext      fill:#d97706,color:#fff,stroke:#92400e,rx:4
+    classDef store    fill:#15803d,color:#fff,stroke:#14532d,rx:4
+    classDef soon     fill:#9ca3af,color:#fff,stroke:#6b7280,rx:4,stroke-dasharray:6 3
+
+    A1([Register Page]):::screen
+    A2([Login Page]):::screen
+    A3([Verify Email Page]):::screen
+    A4[POST /api/auth/register]:::api
+    A5[POST /api/auth/login]:::api
+    A6[GET  /api/auth/verify-email]:::api
+    A7[(Users JSON Store)]:::store
+    A8{{Resend — Email Service}}:::ext
+    A9[JWT Cookie — 14 days]:::store
+
+    A1 -->|email + password| A4
+    A4 -->|bcrypt hash + uuid| A7
+    A4 -->|verification link| A8
+    A8 -->|email to user| A3
+    A3 -->|?token=xxx| A6
+    A6 -->|mark verified| A7
+    A6 --> A9
+    A2 -->|email + password| A5
+    A5 -->|check hash| A7
+    A5 --> A9

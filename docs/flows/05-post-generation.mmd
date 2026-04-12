@@ -1,0 +1,33 @@
+flowchart TD
+
+    classDef screen   fill:#7c3aed,color:#fff,stroke:#5b21b6,rx:8
+    classDef api      fill:#1d4ed8,color:#fff,stroke:#1e3a8a,rx:4
+    classDef ext      fill:#d97706,color:#fff,stroke:#92400e,rx:4
+    classDef store    fill:#15803d,color:#fff,stroke:#14532d,rx:4
+    classDef soon     fill:#9ca3af,color:#fff,stroke:#6b7280,rx:4,stroke-dasharray:6 3
+
+    E1[AddPostModal — date + type + hint]:::screen
+    E2[POST /api/life-stream/generate-post/:persona_id]:::api
+    E3[POST /api/life-stream/generate-schedule/:persona_id]:::api
+    E4{{Claude Haiku — Content Planner}}:::ext
+    E5[comfyui_service.build_realism_prompt]:::api
+    E6{Has face reference URL?}
+    E7{{"Replicate — flux-kontext-max\nMode A: face consistency"}}:::ext
+    E8{{"Replicate — flux-dev-realism\nMode B: no face ref"}}:::ext
+    E9{{Cloudinary CDN}}:::ext
+    E10[(Schedule JSON Store)]:::store
+    E11[Quota check — POST_QUOTA = 3]:::api
+    E12[increment_posts_generated]:::api
+    C2_ref([MonthCalendar — 3-day batch trigger]):::screen
+
+    E1 -->|single post| E2
+    C2_ref -->|"3-day batch"| E3
+    E2 & E3 --> E11
+    E11 -->|ok| E4
+    E4 -->|"scene_prompt + caption\n+ hashtags JSON"| E5
+    E5 -->|"V7 LDR realism prompt\n(character + scene + camera)"| E6
+    E6 -->|yes → Mode A| E7
+    E6 -->|no  → Mode B| E8
+    E7 & E8 -->|Replicate image URL| E9
+    E9 -->|CDN URL| E10
+    E10 -->|"draft post\n(status: draft)"| E12
