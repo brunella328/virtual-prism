@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.api import genesis, life_stream, image, poc, auth
+from app.api import genesis, life_stream, image, poc, auth, chat_sessions
 from app.services import backup_service
 
 logger = logging.getLogger(__name__)
@@ -185,6 +185,10 @@ app.include_router(image.router,       prefix="/api/image",        tags=["Image 
 app.include_router(life_stream.router, prefix="/api/life-stream",  tags=["Life Stream"])
 app.include_router(poc.router,         prefix="/api",              tags=["POC"])
 app.include_router(auth.router,        prefix="/api/auth",         tags=["Auth"])
+app.include_router(chat_sessions.router, prefix="/api",             tags=["Chat Sessions"])
+
+from app.routers.chat_sessions import router as chat_sessions_router
+app.include_router(chat_sessions_router)
 
 
 @app.get("/health")
