@@ -169,3 +169,20 @@ async def update_persona(persona_id: str, req: PersonaUpdateRequest):
     updated = persona.model_copy(update=req.model_dump(exclude_none=True))
     save_persona(persona_id, updated)
     return {"persona_id": persona_id, "persona": updated}
+
+
+class ChatStyleUpdate(BaseModel):
+    chat_style_prompt: Optional[str] = None
+    chat_style_image: Optional[str] = None
+
+
+@router.patch("/persona/{persona_id}/chat-style")
+async def update_chat_style(persona_id: str, body: ChatStyleUpdate):
+    """T4：更新 Persona 的聊天發文風格設定（prompt + 參考圖 URL）"""
+    from app.services.persona_storage import load_persona, save_persona
+    persona = load_persona(persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    updated = persona.model_copy(update=body.model_dump(exclude_none=True))
+    save_persona(persona_id, updated)
+    return {"persona_id": persona_id, "persona": updated}

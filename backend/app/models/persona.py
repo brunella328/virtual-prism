@@ -36,6 +36,8 @@ class PersonaCard(BaseModel):
     content_types: Optional[List[str]] = None  # 預設內容類型（1-3 種），None 表示使用預設值
     created_at: Optional[str] = None  # 建立時間（ISO 8601 格式）
     example_post: Optional[ExamplePost] = None  # 圖文範例（建立時自動產出）
+    chat_style_prompt: Optional[str] = None  # 聊天發文風格 prompt（T4）
+    chat_style_image: Optional[str] = None   # 聊天發文風格參考圖 URL（T4）
     
     @field_validator('content_types')
     @classmethod

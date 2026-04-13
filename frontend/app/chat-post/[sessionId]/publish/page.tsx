@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { apiHeaders } from "@/lib/api";
+
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function PublishPage() {
   const router = useRouter();
@@ -31,19 +34,23 @@ export default function PublishPage() {
     setError("");
 
     try {
-      const res = await fetch(`/api/chat-sessions/${sessionId}/publish`, {
+      const res = await fetch(`${API}/api/chat-sessions/${sessionId}/publish`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           final_text: draft,
           scheduled_at: new Date(scheduledAt).toISOString(),
         }),
       });
 
-      if (!res.ok) throw new Error("發布失敗");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? "發布失敗");
+      }
 
       // 成功，導向 dashboard
-      router.push("/");
+      router.push("/dashboard");
     } catch {
       setError("排程失敗，請重試");
     } finally {
