@@ -180,3 +180,58 @@ async def get_draft(session_id: str):
         "draft_text": session.draft_text,
         "image_url": session.image_url,
     }
+
+
+class PublishRequest(BaseModel):
+    final_text: str
+    scheduled_at: str  # ISO 8601
+
+
+@router.post("/{session_id}/publish")
+async def publish_draft(session_id: str, body: PublishRequest):
+    """將草稿寫入排程（data/schedules/{persona_id}.json），不重新呼叫 AI"""
+    import uuid
+    from datetime import datetime, timezone
+    from app.services.schedule_storage import load_schedule, save_schedule
+
+    try:
+        session = load_session(session_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    post_id = str(uuid.uuid4())
+
+    new_post = {
+        "post_id": post_id,
+        "day": None,
+        "date": body.scheduled_at[:10],
+        "scene": "chat_post",
+        "caption": body.final_text,
+        "image_url": session.image_url,
+        "image_prompt": None,
+        "scene_prompt": None,
+        "status": "scheduled",
+        "scheduled_at": body.scheduled_at,
+        "job_id": None,
+        "published_at": None,
+        "ig_media_id": None,
+        "error_message": None,
+        "hashtags": [],
+        "session_id": session_id,
+        "content_type": "chat_post",
+    }
+
+    # 讀取現有排程並追加新貼文
+    posts = load_schedule(session.persona_id)
+    posts.append(new_post)
+    save_schedule(session.persona_id, posts)
+
+    session.status = "published"
+    update_session(session)
+
+    return {
+        "post_id": post_id,
+        "persona_id": session.persona_id,
+        "scheduled_at": body.scheduled_at,
+        "status": "scheduled",
+    }
