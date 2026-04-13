@@ -187,9 +187,6 @@ app.include_router(poc.router,         prefix="/api",              tags=["POC"])
 app.include_router(auth.router,        prefix="/api/auth",         tags=["Auth"])
 app.include_router(chat_sessions.router, prefix="/api",             tags=["Chat Sessions"])
 
-from app.routers.chat_sessions import router as chat_sessions_router
-app.include_router(chat_sessions_router)
-
 
 @app.get("/health")
 async def health():

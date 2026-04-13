@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { apiGet, apiPost, apiPatch } from "@/lib/api";
 
 type Status = "synthesizing" | "done" | "error";
 
@@ -11,22 +12,31 @@ export default function SynthesizePage() {
   const sessionId = params.sessionId as string;
 
   const [status, setStatus] = useState<Status>("synthesizing");
-  const [draftText, setDraftText] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [editedText, setEditedText] = useState("");
   const [wordCount, setWordCount] = useState(0);
+  const [saving, setSaving] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const applyDraftData = (data: { status: string; draft_text?: string; error_message?: string }) => {
+    setStatus(data.status as Status);
+    if (data.status === "done") {
+      const text = data.draft_text ?? "";
+      setEditedText(text);
+      setWordCount(text.length);
+    }
+    if (data.status === "error") {
+      setErrorMessage(data.error_message ?? "生成失敗，請重試");
+    }
+  };
 
   const startPolling = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/chat-sessions/${sessionId}/draft`);
-        const data = await res.json();
+        const data = await apiGet(`/api/chat-sessions/${sessionId}/draft`);
         if (data.status === "done" || data.status === "error") {
-          setStatus(data.status);
-          setDraftText(data.draft_text ?? "");
-          setEditedText(data.draft_text ?? "");
-          setWordCount((data.draft_text ?? "").length);
+          applyDraftData(data);
           if (intervalRef.current) clearInterval(intervalRef.current);
         }
       } catch {
@@ -37,25 +47,16 @@ export default function SynthesizePage() {
 
   // Initial: trigger synthesize then start polling
   useEffect(() => {
-    fetch(`/api/chat-sessions/${sessionId}/synthesize`, { method: "POST" }).catch(() => {});
+    apiPost(`/api/chat-sessions/${sessionId}/synthesize`, {}).catch(() => {});
     startPolling();
 
     // Immediate first poll
-    (async () => {
-      try {
-        const res = await fetch(`/api/chat-sessions/${sessionId}/draft`);
-        const data = await res.json();
-        if (data.status === "done" || data.status === "error") {
-          setStatus(data.status);
-          setDraftText(data.draft_text ?? "");
-          setEditedText(data.draft_text ?? "");
-          setWordCount((data.draft_text ?? "").length);
-          if (intervalRef.current) clearInterval(intervalRef.current);
-        }
-      } catch {
-        // ignore
+    apiGet(`/api/chat-sessions/${sessionId}/draft`).then((data) => {
+      if (data.status === "done" || data.status === "error") {
+        applyDraftData(data);
+        if (intervalRef.current) clearInterval(intervalRef.current);
       }
-    })();
+    }).catch(() => {});
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -70,17 +71,21 @@ export default function SynthesizePage() {
 
   const handleRegenerate = () => {
     setStatus("synthesizing");
-    setDraftText("");
     setEditedText("");
     setWordCount(0);
-    fetch(`/api/chat-sessions/${sessionId}/synthesize`, { method: "POST" }).catch(() => {});
+    setErrorMessage("");
+    apiPost(`/api/chat-sessions/${sessionId}/synthesize`, {}).catch(() => {});
     startPolling();
   };
 
-  const handleConfirm = () => {
-    router.push(
-      `/chat-post/${sessionId}/publish?draft=${encodeURIComponent(editedText)}`
-    );
+  const handleConfirm = async () => {
+    setSaving(true);
+    try {
+      await apiPatch(`/api/chat-sessions/${sessionId}/draft`, { draft_text: editedText });
+      router.push(`/chat-post/${sessionId}/publish`);
+    } catch {
+      setSaving(false);
+    }
   };
 
   // ── Loading state ──────────────────────────────────────────────
@@ -112,7 +117,7 @@ export default function SynthesizePage() {
         <div className="text-center max-w-md">
           <p className="text-4xl mb-4">⚠️</p>
           <h2 className="text-xl font-semibold mb-2">生成失敗</h2>
-          <p className="text-gray-400 text-sm mb-6">{draftText}</p>
+          <p className="text-gray-400 text-sm mb-6">{errorMessage}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => router.back()}
@@ -163,10 +168,10 @@ export default function SynthesizePage() {
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!editedText.trim()}
+            disabled={!editedText.trim() || saving}
             className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors"
           >
-            確認草稿，選擇排程時間 →
+            {saving ? "儲存中..." : "確認草稿，選擇排程時間 →"}
           </button>
         </div>
       </div>

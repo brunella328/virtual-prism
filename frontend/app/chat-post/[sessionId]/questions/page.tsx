@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { apiGet, apiPost } from "@/lib/api";
 
 interface SessionData {
   id: string;
@@ -23,26 +24,24 @@ export default function QuestionsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`/api/chat-sessions/${sessionId}`)
-      .then((r) => r.json())
+    apiGet(`/api/chat-sessions/${sessionId}`)
       .then((data) => {
         setSession(data);
         // 如果已有答案，從上次繼續
-        const nextUnanswered = data.answers.findIndex((a: string) => \!a);
-        if (nextUnanswered \!== -1) setCurrentIndex(nextUnanswered);
+        const nextUnanswered = data.answers.findIndex((a: string) => !a);
+        if (nextUnanswered !== -1) setCurrentIndex(nextUnanswered);
       })
       .catch(() => setError("無法載入問題"));
   }, [sessionId]);
 
   const handleNext = async () => {
-    if (\!answer.trim() || \!session) return;
+    if (!answer.trim() || !session) return;
     setSaving(true);
 
     try {
-      await fetch(`/api/chat-sessions/${sessionId}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_index: currentIndex, answer: answer.trim() }),
+      await apiPost(`/api/chat-sessions/${sessionId}/answer`, {
+        question_index: currentIndex,
+        answer: answer.trim(),
       });
 
       // 更新本地狀態
@@ -63,14 +62,13 @@ export default function QuestionsPage() {
   };
 
   const handleFinish = async () => {
-    if (\!answer.trim() || \!session) return;
+    if (!answer.trim() || !session) return;
     setLoading(true);
 
     try {
-      await fetch(`/api/chat-sessions/${sessionId}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_index: currentIndex, answer: answer.trim() }),
+      await apiPost(`/api/chat-sessions/${sessionId}/answer`, {
+        question_index: currentIndex,
+        answer: answer.trim(),
       });
 
       router.push(`/chat-post/${sessionId}/synthesize`);

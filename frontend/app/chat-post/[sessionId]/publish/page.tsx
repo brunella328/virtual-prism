@@ -1,29 +1,37 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { apiHeaders } from "@/lib/api";
+import { useRouter, useParams } from "next/navigation";
+import { apiGet, apiHeaders } from "@/lib/api";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function PublishPage() {
   const router = useRouter();
   const params = useParams();
-  const searchParams = useSearchParams();
   const sessionId = params.sessionId as string;
 
-  const draftFromQuery = searchParams.get("draft") ?? "";
-  const [draft, setDraft] = useState(draftFromQuery);
+  const [draft, setDraft] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
+
+  // 從 session 讀草稿
+  useEffect(() => {
+    apiGet(`/api/chat-sessions/${sessionId}/draft`)
+      .then((data) => {
+        setDraft(data.draft_text ?? "");
+      })
+      .catch(() => setError("無法載入草稿"))
+      .finally(() => setFetching(false));
+  }, [sessionId]);
 
   // 預設排程時間：明天同一時間
   useEffect(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setSeconds(0, 0);
-    // datetime-local 格式：YYYY-MM-DDTHH:mm
     const iso = tomorrow.toISOString().slice(0, 16);
     setScheduledAt(iso);
   }, []);
@@ -49,7 +57,6 @@ export default function PublishPage() {
         throw new Error(data.detail ?? "發布失敗");
       }
 
-      // 成功，導向 dashboard
       router.push("/dashboard");
     } catch {
       setError("排程失敗，請重試");
@@ -57,6 +64,14 @@ export default function PublishPage() {
       setLoading(false);
     }
   };
+
+  if (fetching) {
+    return (
+      <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <p className="text-gray-400">載入中...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center p-6 pt-12">

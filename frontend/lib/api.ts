@@ -36,6 +36,17 @@ export async function apiPost(path: string, body: unknown) {
   return res.json()
 }
 
+export async function apiPatch(path: string, body: unknown) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`API Error: ${res.status}`)
+  return res.json()
+}
+
 export async function apiDelete(path: string) {
   const res = await fetch(`${API_URL}${path}`, {
     method: 'DELETE',
