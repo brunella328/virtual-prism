@@ -25,7 +25,7 @@ export default function NewChatPostPage() {
 
   // 載入使用者的 persona（persona_id = userId）
   useEffect(() => {
-    if (\!userId) return
+    if (!userId) return
 
     const fetchPersona = async () => {
       setLoadingPersonas(true)
@@ -53,7 +53,7 @@ export default function NewChatPostPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (\!topic.trim() || \!selectedPersonaId) return
+    if (!topic.trim() || !selectedPersonaId) return
 
     setSubmitting(true)
     setError(null)
@@ -82,7 +82,7 @@ export default function NewChatPostPage() {
     )
   }
 
-  if (\!isAuthenticated) {
+  if (!isAuthenticated) {
     router.push('/login')
     return null
   }
@@ -149,7 +149,7 @@ export default function NewChatPostPage() {
 
           <button
             type="submit"
-            disabled={submitting || \!topic.trim()}
+            disabled={submitting || !topic.trim()}
             className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {submitting ? '⏳ AI 生成問題中…' : '✨ 生成引導問題'}

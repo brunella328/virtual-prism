@@ -85,7 +85,7 @@ export default function QuestionsPage() {
     </main>
   );
 
-  if (\!session) return (
+  if (!session) return (
     <main className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
       <p className="text-gray-400">載入中...</p>
     </main>
@@ -150,7 +150,7 @@ export default function QuestionsPage() {
           {isLast ? (
             <button
               onClick={handleFinish}
-              disabled={\!answer.trim() || loading}
+              disabled={!answer.trim() || loading}
               className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
             >
               {loading ? "處理中..." : "完成，生成草稿"}
@@ -158,7 +158,7 @@ export default function QuestionsPage() {
           ) : (
             <button
               onClick={handleNext}
-              disabled={\!answer.trim() || saving}
+              disabled={!answer.trim() || saving}
               className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
             >
               {saving ? "儲存中..." : "下一題"}
